@@ -5,8 +5,11 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/classes/engine.hpp>
 
 using namespace godot;
+
+OIPComms *_oip_comms;
 
 void initialize_gdextension_types(ModuleInitializationLevel p_level)
 {
@@ -14,12 +17,16 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 		return;
 	}
 	GDREGISTER_CLASS(OIPComms);
+	_oip_comms = memnew(OIPComms);
+	Engine::get_singleton()->register_singleton("OIPComms", _oip_comms);
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+	Engine::get_singleton()->unregister_singleton("OIPComms");
+	memdelete(_oip_comms); // Segmentation fault with and without this line.
 }
 
 extern "C"

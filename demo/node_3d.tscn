@@ -5,5 +5,3 @@
 [node name="Node3D" type="Node3D"]
 script = ExtResource("1_t0q1l")
 flip_bit = true
-
-[node name="OIPComms" type="OIPComms" parent="."]

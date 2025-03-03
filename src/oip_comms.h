@@ -22,6 +22,11 @@ private:
 protected:
 	static void _bind_methods();
 
+
+public:
+
+	void comm_test();
+
 	void set_protocol(const String p_protocol);
 	String get_protocol() const;
 
@@ -37,9 +42,6 @@ protected:
 	void set_tag_name(const String p_tag_name);
 	String get_tag_name() const;
 
-public:
-
-	void comm_test();
 	OIPComms();
 	~OIPComms();
 };

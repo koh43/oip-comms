@@ -86,11 +86,14 @@ void OIPComms::comm_test() {
 
 	if (tag < 0) {
 		UtilityFunctions::print("create failed");
+		return;
 	}
 
 	rc = plc_tag_read(tag, timeout);
 	if (rc != PLCTAG_STATUS_OK) {
+		plc_tag_destroy(tag);
 		UtilityFunctions::print("read failed");
+		return;
 	}
 
 	int val = plc_tag_get_bit(tag, 0);
@@ -105,6 +108,8 @@ void OIPComms::comm_test() {
 	rc = plc_tag_write(tag, timeout);
 	if (rc != PLCTAG_STATUS_OK) {
 		UtilityFunctions::print("write failed");
+		plc_tag_destroy(tag);
+		return;
 	}
 
 	plc_tag_destroy(tag);

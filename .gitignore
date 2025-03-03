@@ -37,7 +37,7 @@ compile_commands.json
 *.pyc
 *.dblite
 *.pdb
-*.lib
+.lib
 *.config
 *.creator
 *.creator.user
@@ -56,3 +56,6 @@ compile_commands.json
 
 # Jetbrains
 .idea/
+
+# VS
+.vs/

@@ -10,6 +10,6 @@ config_version=5
 
 [application]
 
-config/name="godot cpp template"
-config/features=PackedStringArray("4.1", "Forward Plus")
+config/name="OIP Comms GDextension"
+config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"

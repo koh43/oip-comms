@@ -17,6 +17,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 		return;
 	}
 	GDREGISTER_CLASS(OIPComms);
+
 	_oip_comms = memnew(OIPComms);
 	Engine::get_singleton()->register_singleton("OIPComms", _oip_comms);
 }
@@ -25,8 +26,9 @@ void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+
 	Engine::get_singleton()->unregister_singleton("OIPComms");
-	memdelete(_oip_comms); // Segmentation fault with and without this line.
+	memdelete(_oip_comms);
 }
 
 extern "C"

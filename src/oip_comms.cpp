@@ -1,83 +1,129 @@
 #include "oip_comms.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/os.hpp>
 
 using namespace godot;
 
 void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("comm_test"), &OIPComms::comm_test);
 
-	ClassDB::bind_method(D_METHOD("get_protocol"), &OIPComms::get_protocol);
-	ClassDB::bind_method(D_METHOD("set_protocol", "protocol"), &OIPComms::set_protocol);
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "protocol"), "set_protocol", "get_protocol");
+	ClassDB::bind_method(D_METHOD("register_tag_group", "tag_group_name", "polling_interval", "protocol", "gateway", "path", "cpu"), &OIPComms::register_tag_group);
+	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
 
-	ClassDB::bind_method(D_METHOD("get_gateway"), &OIPComms::get_gateway);
-	ClassDB::bind_method(D_METHOD("set_gateway", "gateway"), &OIPComms::set_gateway);
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "gateway"), "set_gateway", "get_gateway");
-
-	ClassDB::bind_method(D_METHOD("get_path"), &OIPComms::get_path);
-	ClassDB::bind_method(D_METHOD("set_path", "path"), &OIPComms::set_path);
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "path"), "set_path", "get_path");
-
-	ClassDB::bind_method(D_METHOD("get_cpu"), &OIPComms::get_cpu);
-	ClassDB::bind_method(D_METHOD("set_cpu", "cpu"), &OIPComms::set_cpu);
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "cpu"), "set_cpu", "get_cpu");
-
-	ClassDB::bind_method(D_METHOD("get_tag_name"), &OIPComms::get_tag_name);
-	ClassDB::bind_method(D_METHOD("set_tag_name", "tag_name"), &OIPComms::set_tag_name);
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "tag_name"), "set_tag_name", "get_tag_name");
+	ClassDB::bind_method(D_METHOD("add_message", "message"), &OIPComms::add_message);
 }
 
 OIPComms::OIPComms() {
+	UtilityFunctions::print("thread start");
+	thread = memnew(Thread);
+	thread->start(callable_mp(this, &OIPComms::background_process));
+
+	set_process(true);
 }
 
 OIPComms::~OIPComms() {
+	/* TBD - this throws an error. not sure how to clean up properly since
+	* singleton does not respond to _exit_tree
+	* probably need to use notification events
+	* https://forum.godotengine.org/t/using-thread-in-a-gdextension/73547
+
+	UtilityFunctions::print("thread quit");
+	thread->wait_to_finish();
+	memdelete(thread);
+	thread = nullptr;
+	*/
+	thread_running = false;
+	tag_group_queue.shutdown();
 }
 
-void OIPComms::set_protocol(const String p_protocol) {
-	protocol = p_protocol;
+void OIPComms::background_process() {
+	while (thread_running) {
+		String tag_group_name = tag_group_queue.pop();
+		if (tag_group_name.is_empty() && !thread_running)
+			break;
+
+		if (tag_groups.find(tag_group_name) != tag_groups.end()) {
+			UtilityFunctions::print("Queueing tag group: " + tag_group_name);
+			process_tag_group(tag_group_name);
+		} else {
+			UtilityFunctions::print("Tag group not found: " + tag_group_name);
+		}
+
+	}
 }
 
-String OIPComms::get_protocol() const {
-	return protocol;
+void OIPComms::add_message(const String message) {
+	tag_group_queue.push(message);
 }
 
-void OIPComms::set_gateway(const String p_gateway) {
-	gateway = p_gateway;
+void OIPComms::process_tag_group(const String tag_group_name) {
+	TagGroup tag_group = tag_groups[tag_group_name];
+
+	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
+
+	int error_count = 0;
+	for (auto const &x : tag_group.tags) {
+		String tag_name = x.first;
+		Tag tag = x.second;
+
+		if (tag.tag_pointer < 0) {
+			String tag_path = group_tag_path + itos(tag.elem_count) + "&name=" + tag_name;
+			tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
+
+			// failed to create tag
+			if (tag.tag_pointer < 0) {
+				UtilityFunctions::print("Failed to create tag: " + tag_name);
+				UtilityFunctions::print("Not processing remainder of tag group: " + tag_group_name);
+				error_count += 1;
+				break;
+			}
+		} else {
+			int readResult = plc_tag_read(tag.tag_pointer, timeout);
+			if (readResult != PLCTAG_STATUS_OK) {
+				UtilityFunctions::print("Failed to read tag: " + tag_name);
+				error_count += 1;
+			}
+		}
+	}
+
+	UtilityFunctions::print("Error count: ", error_count);
 }
 
-String OIPComms::get_gateway() const {
-	return gateway;
+void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
+	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
+		UtilityFunctions::print("Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
+	}
+
+	TagGroup tag_group = {
+		p_polling_interval,
+		0.0f,
+		p_protocol,
+		p_gateway,
+		p_path,
+		p_cpu,
+		std::map<String, Tag>()
+	};
+
+	tag_groups[p_tag_group_name] = tag_group;
+
+	UtilityFunctions::print(tag_groups[p_tag_group_name].polling_interval);
 }
 
-void OIPComms::set_path(const String p_path) {
-	path = p_path;
-}
+void OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, int p_elem_count) {
+	Tag tag = {
+		-1,
+		p_elem_count
+	};
+	tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
 
-String OIPComms::get_path() const {
-	return path;
-}
-
-void OIPComms::set_cpu(const String p_cpu) {
-	cpu = p_cpu;
-}
-
-String OIPComms::get_cpu() const {
-	return cpu;
-}
-
-void OIPComms::set_tag_name(const String p_tag_name) {
-	tag_name = p_tag_name;
-}
-
-String OIPComms::get_tag_name() const {
-	return tag_name;
+	UtilityFunctions::print(tag_groups[p_tag_group_name].tags[p_tag_name].elem_count);
 }
 
 void OIPComms::comm_test() {
-
 	UtilityFunctions::print("start test");
 
+	/*
 	int32_t tag = 0;
 	int rc;
 
@@ -104,7 +150,7 @@ void OIPComms::comm_test() {
 
 	val = plc_tag_get_bit(tag, 0);
 	UtilityFunctions::print("tag (" + tag_name + ") is currently " + itos(val));
-	
+
 	rc = plc_tag_write(tag, timeout);
 	if (rc != PLCTAG_STATUS_OK) {
 		UtilityFunctions::print("write failed");
@@ -113,6 +159,20 @@ void OIPComms::comm_test() {
 	}
 
 	plc_tag_destroy(tag);
-
+	*/
 	UtilityFunctions::print("finish test");
+}
+
+void OIPComms::_process(double delta) {
+
+	for (auto const &x : tag_groups) {
+		String tag_group_name = x.first;
+		TagGroup tag_group = x.second;
+		UtilityFunctions::print(tag_group_name);
+		tag_group.time += delta;
+		if (tag_group.time >= tag_group.polling_interval) {
+			add_message(tag_group_name);
+			tag_group.time = 0.0f;
+		}
+	}
 }

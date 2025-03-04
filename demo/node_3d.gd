@@ -1,11 +1,6 @@
 @tool
 extends Node3D
 
-@export var flip_bit := false: set = _flip_bit
-
-func _flip_bit(_value: bool) -> void:
-	OIPComms.comm_test()
-
 @export var register_tag_group := false: set = _register_tag_group 
 func _register_tag_group(_value: bool) -> void:
 	OIPComms.register_tag_group("test", 1000, "ab_eip", "localhost", "1,2", "ControlLogix")
@@ -14,6 +9,10 @@ func _register_tag_group(_value: bool) -> void:
 func _register_tag(_value: bool) -> void:
 	OIPComms.register_tag("test", "TEST_INPUT", 1)
 
-@export var add_message := false: set = _add_message
-func _add_message(_value: bool) -> void:
-	OIPComms.add_message("test")
+@export var read_bit := false: set = _read_bit
+func _read_bit(_value: bool) -> void:
+	print(OIPComms.read_bit("test", "TEST_INPUT"))
+
+@export var flip_bit := false: set = _flip_bit
+func _flip_bit(_value: bool) -> void:
+	OIPComms.write_bit("test", "TEST_INPUT", not OIPComms.read_bit("test", "TEST_INPUT"))

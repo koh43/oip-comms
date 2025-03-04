@@ -2,6 +2,10 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/time.hpp>
 
 using namespace godot;
 
@@ -11,15 +15,18 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("register_tag_group", "tag_group_name", "polling_interval", "protocol", "gateway", "path", "cpu"), &OIPComms::register_tag_group);
 	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
 
-	ClassDB::bind_method(D_METHOD("add_message", "message"), &OIPComms::add_message);
+	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
+	ClassDB::bind_method(D_METHOD("write_bit", "tag_group_name", "tag_name", "value"), &OIPComms::write_bit);
 }
 
 OIPComms::OIPComms() {
-	UtilityFunctions::print("thread start");
-	thread = memnew(Thread);
-	thread->start(callable_mp(this, &OIPComms::background_process));
+	UtilityFunctions::print("read thread start");
+	read_thread = memnew(Thread);
+	read_thread->start(callable_mp(this, &OIPComms::read));
 
-	set_process(true);
+	UtilityFunctions::print("watchdog thread start");
+	watchdog_thread = memnew(Thread);
+	watchdog_thread->start(callable_mp(this, &OIPComms::watchdog));
 }
 
 OIPComms::~OIPComms() {
@@ -33,18 +40,34 @@ OIPComms::~OIPComms() {
 	memdelete(thread);
 	thread = nullptr;
 	*/
-	thread_running = false;
+	watchdog_thread_running = false;
+	read_thread_running = false;
 	tag_group_queue.shutdown();
 }
 
-void OIPComms::background_process() {
-	while (thread_running) {
+void OIPComms::watchdog() {
+	while (watchdog_thread_running) {
+		if (!scene_signals_set) {
+			SceneTree *main_scene = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop());
+			if (main_scene != nullptr) {
+				main_scene->connect("process_frame", callable_mp(this, &OIPComms::process));
+				UtilityFunctions::print("Scene signals set");
+				scene_signals_set = true;
+			}
+		}
+
+		OS::get_singleton()->delay_msec(500);
+	}
+}
+
+void OIPComms::read() {
+	while (read_thread_running) {
 		String tag_group_name = tag_group_queue.pop();
-		if (tag_group_name.is_empty() && !thread_running)
+		if (tag_group_name.is_empty() && !read_thread_running)
 			break;
 
 		if (tag_groups.find(tag_group_name) != tag_groups.end()) {
-			UtilityFunctions::print("Queueing tag group: " + tag_group_name);
+			//UtilityFunctions::print("Queueing tag group: " + tag_group_name);
 			process_tag_group(tag_group_name);
 		} else {
 			UtilityFunctions::print("Tag group not found: " + tag_group_name);
@@ -53,8 +76,8 @@ void OIPComms::background_process() {
 	}
 }
 
-void OIPComms::add_message(const String message) {
-	tag_group_queue.push(message);
+void OIPComms::queue_tag_group(const String tag_group_name) {
+	tag_group_queue.push(tag_group_name);
 }
 
 void OIPComms::process_tag_group(const String tag_group_name) {
@@ -67,27 +90,31 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 		String tag_name = x.first;
 		Tag tag = x.second;
 
+		// tag is not initialized
 		if (tag.tag_pointer < 0) {
 			String tag_path = group_tag_path + itos(tag.elem_count) + "&name=" + tag_name;
-			tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
+			tag_groups[tag_group_name].tags[tag_name].tag_pointer = tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
 
 			// failed to create tag
 			if (tag.tag_pointer < 0) {
 				UtilityFunctions::print("Failed to create tag: " + tag_name);
-				UtilityFunctions::print("Not processing remainder of tag group: " + tag_group_name);
+				UtilityFunctions::print("Skipping remainder of tag group: " + tag_group_name);
 				error_count += 1;
 				break;
 			}
 		} else {
-			int readResult = plc_tag_read(tag.tag_pointer, timeout);
-			if (readResult != PLCTAG_STATUS_OK) {
+			UtilityFunctions::print("Read tag " + tag_name);
+			int read_result = plc_tag_read(tag.tag_pointer, timeout);
+			if (read_result != PLCTAG_STATUS_OK) {
 				UtilityFunctions::print("Failed to read tag: " + tag_name);
+				UtilityFunctions::print("Skipping remainder of tag group: " + tag_group_name);
 				error_count += 1;
+				break;
 			}
 		}
 	}
 
-	UtilityFunctions::print("Error count: ", error_count);
+	//UtilityFunctions::print("Error count: ", error_count);
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
@@ -107,17 +134,17 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 	tag_groups[p_tag_group_name] = tag_group;
 
-	UtilityFunctions::print(tag_groups[p_tag_group_name].polling_interval);
+	//UtilityFunctions::print(tag_groups[p_tag_group_name].polling_interval);
 }
 
-void OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, int p_elem_count) {
+void OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
 	Tag tag = {
 		-1,
 		p_elem_count
 	};
 	tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
 
-	UtilityFunctions::print(tag_groups[p_tag_group_name].tags[p_tag_name].elem_count);
+	//UtilityFunctions::print(tag_groups[p_tag_group_name].tags[p_tag_name].elem_count);
 }
 
 void OIPComms::comm_test() {
@@ -163,16 +190,28 @@ void OIPComms::comm_test() {
 	UtilityFunctions::print("finish test");
 }
 
-void OIPComms::_process(double delta) {
+int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
+	int32_t tag_pointer = tag_groups[p_tag_group_name].tags[p_tag_name].tag_pointer;
+	return plc_tag_get_bit(tag_pointer, 0);
+}
 
+int OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value) {
+	int32_t tag_pointer = tag_groups[p_tag_group_name].tags[p_tag_name].tag_pointer;
+	plc_tag_set_bit(tag_pointer, 0, p_value);
+	return plc_tag_write(tag_pointer, timeout);
+}
+
+void OIPComms::process() {
+	uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
+	double delta = (current_ticks - last_ticks) / 1000.0f;
 	for (auto const &x : tag_groups) {
 		String tag_group_name = x.first;
-		TagGroup tag_group = x.second;
-		UtilityFunctions::print(tag_group_name);
-		tag_group.time += delta;
-		if (tag_group.time >= tag_group.polling_interval) {
-			add_message(tag_group_name);
-			tag_group.time = 0.0f;
+		tag_groups[tag_group_name].time += delta;
+
+		if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
+			queue_tag_group(tag_group_name);
+			tag_groups[tag_group_name].time = 0.0f;
 		}
 	}
+	last_ticks = current_ticks;
 }

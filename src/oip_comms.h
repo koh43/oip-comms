@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <queue>
 
 #include "oip_blocking_queue.h"
 
@@ -22,6 +23,7 @@ private:
 	struct Tag {
 		int32_t tag_pointer;
 		int elem_count;
+		bool dirty;
 	};
 
 	struct TagGroup {
@@ -36,8 +38,16 @@ private:
 	};
 	std::map<String, TagGroup> tag_groups;
 
-	Thread *read_thread = nullptr;
-	bool read_thread_running = true;
+	struct WriteRequest {
+		uint8_t instruction;
+		String tag_group_name;
+		String tag_name;
+		int value;
+	};
+	std::queue<WriteRequest> write_queue;
+
+	Thread *work_thread = nullptr;
+	bool work_thread_running = true;
 
 	Thread *watchdog_thread = nullptr;
 	bool watchdog_thread_running = true;
@@ -49,10 +59,15 @@ private:
 	bool scene_signals_set = false;
 
 	void watchdog();
-	void read();
+	void process_work();
 
 	void process_tag_group(const String tag_group_name);
 	void queue_tag_group(const String tag_group_name);
+
+	void flush_all_writes();
+	void flush_one_write();
+	void process_write(const WriteRequest& write_req);
+	bool process_read(const Tag &tag, const String tag_name);
 
 
 protected:
@@ -67,7 +82,7 @@ public:
 	void register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 
 	int read_bit(const String p_tag_group_name, const String p_tag_name);
-	int write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
+	void write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
 
 	void process();
 

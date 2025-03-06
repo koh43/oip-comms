@@ -16,6 +16,7 @@ func _read_bit(_value: bool) -> void:
 @export var flip_bit := false: set = _flip_bit
 func _flip_bit(_value: bool) -> void:
 	OIPComms.write_bit("test", "TEST_INPUT", not OIPComms.read_bit("test", "TEST_INPUT"))
+	print(OIPComms.read_bit("test", "TEST_INPUT"))
 
 @export var test_editor := false: set = _test_editor
 func _test_editor(_value: bool) -> void:

@@ -62,6 +62,8 @@ void OIPComms::watchdog() {
 
 void OIPComms::read() {
 	while (read_thread_running) {
+
+		// this pop operation is blocking - thread will sleep until a request comes along
 		String tag_group_name = tag_group_queue.pop();
 		if (tag_group_name.is_empty() && !read_thread_running)
 			break;

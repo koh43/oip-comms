@@ -3,7 +3,7 @@ extends Node3D
 
 @export var register_tag_group := false: set = _register_tag_group 
 func _register_tag_group(_value: bool) -> void:
-	OIPComms.register_tag_group("test", 1000, "ab_eip", "localhost", "1,2", "ControlLogix")
+	OIPComms.register_tag_group("test", 5000, "ab_eip", "localhost", "1,2", "ControlLogix")
 
 @export var register_tag := false: set = _register_tag
 func _register_tag(_value: bool) -> void:
@@ -16,3 +16,8 @@ func _read_bit(_value: bool) -> void:
 @export var flip_bit := false: set = _flip_bit
 func _flip_bit(_value: bool) -> void:
 	OIPComms.write_bit("test", "TEST_INPUT", not OIPComms.read_bit("test", "TEST_INPUT"))
+
+@export var test_editor := false: set = _test_editor
+func _test_editor(_value: bool) -> void:
+	
+	pass

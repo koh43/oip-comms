@@ -14,7 +14,28 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
 
 	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
+	ClassDB::bind_method(D_METHOD("read_uint64", "tag_group_name", "tag_name"), &OIPComms::read_uint64);
+	ClassDB::bind_method(D_METHOD("read_int64", "tag_group_name", "tag_name"), &OIPComms::read_int64);
+	ClassDB::bind_method(D_METHOD("read_uint32", "tag_group_name", "tag_name"), &OIPComms::read_uint32);
+	ClassDB::bind_method(D_METHOD("read_int32", "tag_group_name", "tag_name"), &OIPComms::read_int32);
+	ClassDB::bind_method(D_METHOD("read_uint16", "tag_group_name", "tag_name"), &OIPComms::read_uint16);
+	ClassDB::bind_method(D_METHOD("read_int16", "tag_group_name", "tag_name"), &OIPComms::read_int16);
+	ClassDB::bind_method(D_METHOD("read_uint8", "tag_group_name", "tag_name"), &OIPComms::read_uint8);
+	ClassDB::bind_method(D_METHOD("read_int8", "tag_group_name", "tag_name"), &OIPComms::read_int8);
+	ClassDB::bind_method(D_METHOD("read_float64", "tag_group_name", "tag_name"), &OIPComms::read_float64);
+	ClassDB::bind_method(D_METHOD("read_float32", "tag_group_name", "tag_name"), &OIPComms::read_float32);
+
 	ClassDB::bind_method(D_METHOD("write_bit", "tag_group_name", "tag_name", "value"), &OIPComms::write_bit);
+	ClassDB::bind_method(D_METHOD("write_uint64", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint64);
+	ClassDB::bind_method(D_METHOD("write_int64", "tag_group_name", "tag_name", "value"), &OIPComms::write_int64);
+	ClassDB::bind_method(D_METHOD("write_uint32", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint32);
+	ClassDB::bind_method(D_METHOD("write_int32", "tag_group_name", "tag_name", "value"), &OIPComms::write_int32);
+	ClassDB::bind_method(D_METHOD("write_uint16", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint16);
+	ClassDB::bind_method(D_METHOD("write_int16", "tag_group_name", "tag_name", "value"), &OIPComms::write_int16);
+	ClassDB::bind_method(D_METHOD("write_uint8", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint8);
+	ClassDB::bind_method(D_METHOD("write_int8", "tag_group_name", "tag_name", "value"), &OIPComms::write_int8);
+	ClassDB::bind_method(D_METHOD("write_float64", "tag_group_name", "tag_name", "value"), &OIPComms::write_float64);
+	ClassDB::bind_method(D_METHOD("write_float32", "tag_group_name", "tag_name", "value"), &OIPComms::write_float32);
 
 	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
 	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
@@ -110,7 +131,36 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 			plc_tag_set_bit(tag_pointer, 0, write_req.value);
 			break;
 		case 1:
+			plc_tag_set_uint64(tag_pointer, 0, write_req.value);
 			break;
+		case 2:
+			plc_tag_set_int64(tag_pointer, 0, write_req.value);
+			break;
+		case 3:
+			plc_tag_set_uint32(tag_pointer, 0, write_req.value);
+			break;
+		case 4:
+			plc_tag_set_int32(tag_pointer, 0, write_req.value);
+			break;
+		case 5:
+			plc_tag_set_uint16(tag_pointer, 0, write_req.value);
+			break;
+		case 6:
+			plc_tag_set_int16(tag_pointer, 0, write_req.value);
+			break;
+		case 7:
+			plc_tag_set_uint8(tag_pointer, 0, write_req.value);
+			break;
+		case 8:
+			plc_tag_set_int8(tag_pointer, 0, write_req.value);
+			break;
+		case 9:
+			plc_tag_set_float64(tag_pointer, 0, write_req.value);
+			break;
+		case 10:
+			plc_tag_set_float32(tag_pointer, 0, write_req.value);
+			break;
+
 	}
 	if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 		tag_groups[write_req.tag_group_name].tags[write_req.tag_name].dirty = true;
@@ -205,6 +255,8 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 	}
 }
 
+/* Original functions - if needed to debug
+
 int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
 	if (enable_comms && sim_running) {
 		Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
@@ -228,6 +280,40 @@ void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name,
 		tag_group_queue.push("");
 	}
 }
+*/
+
+OIP_READ_FUNC(int, bit)
+OIP_WRITE_FUNC(bit, int, 0)
+
+OIP_READ_FUNC(uint64_t, uint64)
+OIP_WRITE_FUNC(uint64, uint64_t, 1)
+
+OIP_READ_FUNC(int64_t, int64)
+OIP_WRITE_FUNC(int64, int64_t, 2)
+
+OIP_READ_FUNC(uint32_t, uint32)
+OIP_WRITE_FUNC(uint32, uint32_t, 3)
+
+OIP_READ_FUNC(int32_t, int32)
+OIP_WRITE_FUNC(int32, int32_t, 4)
+
+OIP_READ_FUNC(uint16_t, uint16)
+OIP_WRITE_FUNC(uint16, uint16_t, 5)
+
+OIP_READ_FUNC(int16_t, int16)
+OIP_WRITE_FUNC(int16, int16_t, 6)
+
+OIP_READ_FUNC(uint8_t, uint8)
+OIP_WRITE_FUNC(uint8, uint8_t, 7)
+
+OIP_READ_FUNC(int8_t, int8)
+OIP_WRITE_FUNC(int8, int8_t, 8)
+
+OIP_READ_FUNC(double, float64)
+OIP_WRITE_FUNC(float64, double, 9)
+
+OIP_READ_FUNC(float, float32)
+OIP_WRITE_FUNC(float32, float, 10)
 
 void OIPComms::process() {
 	if (enable_comms && sim_running) {
@@ -236,7 +322,7 @@ void OIPComms::process() {
 		for (auto const &x : tag_groups) {
 			String tag_group_name = x.first;
 			tag_groups[tag_group_name].time += delta;
-
+				
 			if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
 				queue_tag_group(tag_group_name);
 				emit_signal("tag_group_polled", tag_group_name);

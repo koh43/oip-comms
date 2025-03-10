@@ -1,11 +1,11 @@
 #include "oip_comms.h"
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
-#include <godot_cpp/classes/os.hpp>
-#include <godot_cpp/classes/object.hpp>
-#include <godot_cpp/classes/scene_tree.hpp>
-#include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/time.hpp>
 
 using namespace godot;
 
@@ -19,17 +19,23 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
 	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
 
+	ClassDB::bind_method(D_METHOD("set_sim_running", "value"), &OIPComms::set_sim_running);
+	ClassDB::bind_method(D_METHOD("get_sim_running"), &OIPComms::get_sim_running);
+
+	ClassDB::bind_method(D_METHOD("set_enable_log", "value"), &OIPComms::set_enable_log);
+	ClassDB::bind_method(D_METHOD("get_enable_log"), &OIPComms::get_enable_log);
+
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
 OIPComms::OIPComms() {
 	// maybe using RefCounted here instead will make warnings go away?
 
-	UtilityFunctions::print("read thread start");
+	print("read thread start");
 	work_thread = memnew(Thread);
 	work_thread->start(callable_mp(this, &OIPComms::process_work));
 
-	UtilityFunctions::print("watchdog thread start");
+	print("watchdog thread start");
 	watchdog_thread = memnew(Thread);
 	watchdog_thread->start(callable_mp(this, &OIPComms::watchdog));
 }
@@ -40,7 +46,7 @@ OIPComms::~OIPComms() {
 	* probably need to use notification events
 	* https://forum.godotengine.org/t/using-thread-in-a-gdextension/73547
 
-	UtilityFunctions::print("thread quit");
+	print("thread quit");
 	thread->wait_to_finish();
 	memdelete(thread);
 	thread = nullptr;
@@ -48,7 +54,7 @@ OIPComms::~OIPComms() {
 	watchdog_thread_running = false;
 	work_thread_running = false;
 	tag_group_queue.shutdown();
-	UtilityFunctions::print("threads shutdown");
+	print("threads shutdown");
 }
 
 void OIPComms::watchdog() {
@@ -57,7 +63,7 @@ void OIPComms::watchdog() {
 			SceneTree *main_scene = Object::cast_to<SceneTree>(Engine::get_singleton()->get_main_loop());
 			if (main_scene != nullptr) {
 				main_scene->connect("process_frame", callable_mp(this, &OIPComms::process));
-				UtilityFunctions::print("Scene signals set");
+				print("Scene signals set");
 				scene_signals_set = true;
 			}
 		}
@@ -80,12 +86,11 @@ void OIPComms::process_work() {
 			process_tag_group(tag_group_name);
 		} else {
 			if (tag_group_name.is_empty()) {
-				//UtilityFunctions::print("Processing writes (no tag groups to be updated)");
+				//print("Processing writes (no tag groups to be updated)");
 			} else {
-				UtilityFunctions::print("Tag group not found: " + tag_group_name);
+				print("Tag group not found: " + tag_group_name);
 			}
 		}
-
 	}
 }
 
@@ -117,7 +122,7 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 	if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 		tag_groups[write_req.tag_group_name].tags[write_req.tag_name].dirty = true;
 	} else {
-		UtilityFunctions::print("OIPComms: Failed to write tag: " + write_req.tag_name);
+		print("OIPComms: Failed to write tag: " + write_req.tag_name);
 	}
 }
 
@@ -129,7 +134,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 	TagGroup tag_group = tag_groups[tag_group_name];
 
 	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
-	//UtilityFunctions::print("Process tag group " + tag_group_name);
+	//print("Process tag group " + tag_group_name);
 	for (auto const &x : tag_group.tags) {
 		String tag_name = x.first;
 		Tag tag = x.second;
@@ -141,22 +146,22 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 
 			// failed to create tag
 			if (tag.tag_pointer < 0) {
-				UtilityFunctions::print("OIPComms: Failed to create tag: " + tag_name);
-				UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+				print("OIPComms: Failed to create tag: " + tag_name);
+				print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				if (!process_read(tag, tag_name)) {
-					UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+					print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 					break;
 				} else {
 					// if read was successful, the tag read is now clean
-					tag_groups[tag_group_name].tags[tag_name].dirty = false;				
+					tag_groups[tag_group_name].tags[tag_name].dirty = false;
 				}
 			}
 		} else {
 			// tag is already initialized, now read it
 			if (!process_read(tag, tag_name)) {
-				UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+				print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				// if read was successful, the tag read is now clean
@@ -169,7 +174,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 bool OIPComms::process_read(const Tag &tag, const String tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
-		UtilityFunctions::print("OIPComms: Failed to read tag: " + tag_name);
+		print("OIPComms: Failed to read tag: " + tag_name);
 		return false;
 	}
 	return true;
@@ -177,7 +182,7 @@ bool OIPComms::process_read(const Tag &tag, const String tag_name) {
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		UtilityFunctions::print("OIPComms: Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
+		print("OIPComms: Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
 	}
 
 	TagGroup tag_group = {
@@ -193,16 +198,22 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 	tag_groups[p_tag_group_name] = tag_group;
 }
 
-void OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
-	Tag tag = {
-		-1,
-		p_elem_count
-	};
-	tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
+bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
+	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
+		Tag tag = {
+			-1,
+			p_elem_count
+		};
+		tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
+		return true;
+	} else {
+		print("OIPComms: Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");
+		return false;
+	}
 }
 
 int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
-	if (enable_comms) {
+	if (enable_comms && sim_running) {
 		Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
 		if (tag.dirty) {
 			// should not do this here - cross threading issues
@@ -219,7 +230,7 @@ int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
 }
 
 void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value) {
-	if (enable_comms) {
+	if (enable_comms && sim_running) {
 		WriteRequest write_req = {
 			0,
 			p_tag_group_name,
@@ -234,7 +245,7 @@ void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name,
 }
 
 void OIPComms::process() {
-	if (enable_comms) {
+	if (enable_comms && sim_running) {
 		uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
 		double delta = (current_ticks - last_ticks) / 1000.0f;
 		for (auto const &x : tag_groups) {
@@ -251,15 +262,59 @@ void OIPComms::process() {
 	}
 }
 
+void OIPComms::print(const Variant &message) {
+	if (enable_log) {
+		UtilityFunctions::print(message);
+	}
+}
+
+// --- GETTERS/SETTERS
 void OIPComms::set_enable_comms(bool value) {
 	enable_comms = value;
 	if (value) {
-		UtilityFunctions::print("OIPComms: Communications enabled");
+		print("OIPComms: Communications enabled");
 	} else {
-		UtilityFunctions::print("OIPComms: Communications disabled");
+		print("OIPComms: Communications disabled");
 	}
 }
 
 bool OIPComms::get_enable_comms() {
 	return enable_comms;
+}
+
+void OIPComms::set_sim_running(bool value) {
+	sim_running = value;
+	if (value) {
+		print("OIPComms: Sim running");
+
+		// queue all tag groups for a first-time poll
+
+		/* does not work as expected - some timing issue
+		for (auto const &x : tag_groups) {
+			String tag_group_name = x.first;
+			queue_tag_group(tag_group_name);
+			emit_signal("tag_group_polled", tag_group_name);
+		}
+		*/
+
+	} else {
+		print("OIPComms: Sim stopped");
+	}
+}
+
+bool OIPComms::get_sim_running() {
+	return sim_running;
+}
+
+void OIPComms::set_enable_log(bool value) {
+	if (value) {
+		print("OIPComms: Logging enabled");
+	} else {
+		print("OIPComms: Logging disabled");
+	}
+	enable_log = value;
+}
+
+bool OIPComms::get_enable_log() {
+	return enable_log;
 }

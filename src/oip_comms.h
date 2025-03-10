@@ -58,7 +58,10 @@ private:
 
 	bool scene_signals_set = false;
 
-	bool enable_comms = false;
+	bool enable_comms = true;
+	bool sim_running = false;
+
+	bool enable_log = false;
 
 	void watchdog();
 	void process_work();
@@ -71,6 +74,7 @@ private:
 	void process_write(const WriteRequest& write_req);
 	bool process_read(const Tag &tag, const String tag_name);
 
+	void print(const Variant &message);
 
 protected:
 	static void _bind_methods();
@@ -80,8 +84,14 @@ public:
 	bool get_enable_comms();
 	void set_enable_comms(bool value);
 
+	bool get_sim_running();
+	void set_sim_running(bool value);
+
+	bool get_enable_log();
+	void set_enable_log(bool value);
+
 	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
-	void register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
+	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 	int read_bit(const String p_tag_group_name, const String p_tag_name);
 	void write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
 

@@ -18,6 +18,8 @@ void OIPComms::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
 	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
+
+	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
 OIPComms::OIPComms() {
@@ -180,7 +182,7 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 	TagGroup tag_group = {
 		p_polling_interval,
-		p_polling_interval, // initiale time to polling time and it should kick an initial read
+		p_polling_interval * 1.0f, // initialize time to polling time and it should kick an initial read
 		p_protocol,
 		p_gateway,
 		p_path,
@@ -241,6 +243,7 @@ void OIPComms::process() {
 
 			if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
 				queue_tag_group(tag_group_name);
+				emit_signal("tag_group_polled", tag_group_name);
 				tag_groups[tag_group_name].time = 0.0f;
 			}
 		}

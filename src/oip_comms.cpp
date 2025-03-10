@@ -208,13 +208,6 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
 	if (enable_comms && sim_running) {
 		Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
-		if (tag.dirty) {
-			// should not do this here - cross threading issues
-			//process_read(tag, p_tag_name);
-
-			// right now it's not a huge deal if the tag is dirty. data is in the buffer from the previous write
-			// only risk is if another system is writing to the tag, then this read could be incorrect
-		}
 
 		int32_t tag_pointer = tag.tag_pointer;
 		return plc_tag_get_bit(tag_pointer, 0);
@@ -232,7 +225,6 @@ void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name,
 		};
 		write_queue.push(write_req);
 
-		// a little ad hoc - but this forces all writes to flush prior to reading
 		tag_group_queue.push("");
 	}
 }

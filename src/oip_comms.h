@@ -23,6 +23,10 @@ private:
 	struct Tag {
 		int32_t tag_pointer;
 		int elem_count;
+
+		// tag becomes dirty when a write happens before the next polled read
+		// TBD - in the future expose an API so that "immediate reads" can occur
+		// a little tricky with the current blocking queue/thread implementation
 		bool dirty;
 	};
 

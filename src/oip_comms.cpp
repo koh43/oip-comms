@@ -286,17 +286,6 @@ void OIPComms::set_sim_running(bool value) {
 	sim_running = value;
 	if (value) {
 		print("OIPComms: Sim running");
-
-		// queue all tag groups for a first-time poll
-
-		/* does not work as expected - some timing issue
-		for (auto const &x : tag_groups) {
-			String tag_group_name = x.first;
-			queue_tag_group(tag_group_name);
-			emit_signal("tag_group_polled", tag_group_name);
-		}
-		*/
-
 	} else {
 		print("OIPComms: Sim stopped");
 	}
@@ -307,12 +296,14 @@ bool OIPComms::get_sim_running() {
 }
 
 void OIPComms::set_enable_log(bool value) {
-	if (value) {
-		print("OIPComms: Logging enabled");
-	} else {
-		print("OIPComms: Logging disabled");
-	}
 	enable_log = value;
+	if (value) {
+		// use UtilityFunctions so we can actually see the disabled message
+		UtilityFunctions::print("OIPComms: Logging enabled");
+	} else {
+		UtilityFunctions::print("OIPComms: Logging disabled");
+	}
+
 }
 
 bool OIPComms::get_enable_log() {

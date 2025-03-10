@@ -31,30 +31,23 @@ void OIPComms::_bind_methods() {
 OIPComms::OIPComms() {
 	// maybe using RefCounted here instead will make warnings go away?
 
-	print("read thread start");
-	work_thread = memnew(Thread);
+	print("OIPComms: Read thread start");
+	work_thread.instantiate();
 	work_thread->start(callable_mp(this, &OIPComms::process_work));
 
-	print("watchdog thread start");
-	watchdog_thread = memnew(Thread);
+	print("OIPComms: Watchdog thread start");
+	watchdog_thread.instantiate();
 	watchdog_thread->start(callable_mp(this, &OIPComms::watchdog));
 }
 
 OIPComms::~OIPComms() {
-	/* TBD - this throws an error. not sure how to clean up properly since
-	* singleton does not respond to _exit_tree
-	* probably need to use notification events
-	* https://forum.godotengine.org/t/using-thread-in-a-gdextension/73547
-
-	print("thread quit");
-	thread->wait_to_finish();
-	memdelete(thread);
-	thread = nullptr;
-	*/
 	watchdog_thread_running = false;
 	work_thread_running = false;
 	tag_group_queue.shutdown();
-	print("threads shutdown");
+
+	work_thread->wait_to_finish();
+	watchdog_thread->wait_to_finish();
+	print("OIPComms: Threads shutdown");
 }
 
 void OIPComms::watchdog() {

@@ -46,10 +46,10 @@ private:
 	};
 	std::queue<WriteRequest> write_queue;
 
-	Thread *work_thread = nullptr;
+	Ref<Thread> work_thread;
 	bool work_thread_running = true;
 
-	Thread *watchdog_thread = nullptr;
+	Ref<Thread> watchdog_thread;
 	bool watchdog_thread_running = true;
 
 	OIPBlockingQueue tag_group_queue;

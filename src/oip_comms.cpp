@@ -10,13 +10,14 @@
 using namespace godot;
 
 void OIPComms::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("comm_test"), &OIPComms::comm_test);
-
 	ClassDB::bind_method(D_METHOD("register_tag_group", "tag_group_name", "polling_interval", "protocol", "gateway", "path", "cpu"), &OIPComms::register_tag_group);
 	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
 
 	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
 	ClassDB::bind_method(D_METHOD("write_bit", "tag_group_name", "tag_name", "value"), &OIPComms::write_bit);
+
+	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
+	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
 }
 
 OIPComms::OIPComms() {
@@ -77,7 +78,7 @@ void OIPComms::process_work() {
 			process_tag_group(tag_group_name);
 		} else {
 			if (tag_group_name.is_empty()) {
-				UtilityFunctions::print("Processing writes (no tag groups to be updated)");
+				//UtilityFunctions::print("Processing writes (no tag groups to be updated)");
 			} else {
 				UtilityFunctions::print("Tag group not found: " + tag_group_name);
 			}
@@ -114,7 +115,7 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 	if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 		tag_groups[write_req.tag_group_name].tags[write_req.tag_name].dirty = true;
 	} else {
-		UtilityFunctions::print("Failed to write tag: " + write_req.tag_name);
+		UtilityFunctions::print("OIPComms: Failed to write tag: " + write_req.tag_name);
 	}
 }
 
@@ -126,7 +127,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 	TagGroup tag_group = tag_groups[tag_group_name];
 
 	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
-	UtilityFunctions::print("Process tag group " + tag_group_name);
+	//UtilityFunctions::print("Process tag group " + tag_group_name);
 	for (auto const &x : tag_group.tags) {
 		String tag_name = x.first;
 		Tag tag = x.second;
@@ -138,12 +139,12 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 
 			// failed to create tag
 			if (tag.tag_pointer < 0) {
-				UtilityFunctions::print("Failed to create tag: " + tag_name);
-				UtilityFunctions::print("Skipping remainder of tag group: " + tag_group_name);
+				UtilityFunctions::print("OIPComms: Failed to create tag: " + tag_name);
+				UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				if (!process_read(tag, tag_name)) {
-					UtilityFunctions::print("Skipping remainder of tag group: " + tag_group_name);
+					UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 					break;
 				} else {
 					// if read was successful, the tag read is now clean
@@ -153,7 +154,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 		} else {
 			// tag is already initialized, now read it
 			if (!process_read(tag, tag_name)) {
-				UtilityFunctions::print("Skipping remainder of tag group: " + tag_group_name);
+				UtilityFunctions::print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				// if read was successful, the tag read is now clean
@@ -166,7 +167,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 bool OIPComms::process_read(const Tag &tag, const String tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
-		UtilityFunctions::print("Failed to read tag: " + tag_name);
+		UtilityFunctions::print("OIPComms: Failed to read tag: " + tag_name);
 		return false;
 	}
 	return true;
@@ -174,7 +175,7 @@ bool OIPComms::process_read(const Tag &tag, const String tag_name) {
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		UtilityFunctions::print("Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
+		UtilityFunctions::print("OIPComms: Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
 	}
 
 	TagGroup tag_group = {
@@ -198,87 +199,64 @@ void OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 	tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
 }
 
-void OIPComms::comm_test() {
-	UtilityFunctions::print("start test");
-
-	/*
-	int32_t tag = 0;
-	int rc;
-
-	String tag_path = "protocol=" + protocol + "&gateway=" + gateway + "&path=" + path + "&cpu=" + cpu + "&elem_count=1&name=" + tag_name;
-	tag = plc_tag_create(tag_path.utf8().get_data(), timeout);
-
-	if (tag < 0) {
-		UtilityFunctions::print("create failed");
-		return;
-	}
-
-	rc = plc_tag_read(tag, timeout);
-	if (rc != PLCTAG_STATUS_OK) {
-		plc_tag_destroy(tag);
-		UtilityFunctions::print("read failed");
-		return;
-	}
-
-	int val = plc_tag_get_bit(tag, 0);
-	UtilityFunctions::print("tag (" + tag_name + ") is currently " + itos(val));
-
-	UtilityFunctions::print("flipping tag value");
-	plc_tag_set_bit(tag, 0, !val);
-
-	val = plc_tag_get_bit(tag, 0);
-	UtilityFunctions::print("tag (" + tag_name + ") is currently " + itos(val));
-
-	rc = plc_tag_write(tag, timeout);
-	if (rc != PLCTAG_STATUS_OK) {
-		UtilityFunctions::print("write failed");
-		plc_tag_destroy(tag);
-		return;
-	}
-
-	plc_tag_destroy(tag);
-	*/
-	UtilityFunctions::print("finish test");
-}
-
 int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
-	Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
-	if (tag.dirty) {
-		// should not do this here - cross threading issues
-		//process_read(tag, p_tag_name);
+	if (enable_comms) {
+		Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
+		if (tag.dirty) {
+			// should not do this here - cross threading issues
+			//process_read(tag, p_tag_name);
 
-		// right now it's not a huge deal if the tag is dirty. data is in the buffer from the previous write
-		// only risk is if another system is writing to the tag, then this read could be incorrect
+			// right now it's not a huge deal if the tag is dirty. data is in the buffer from the previous write
+			// only risk is if another system is writing to the tag, then this read could be incorrect
+		}
+
+		int32_t tag_pointer = tag.tag_pointer;
+		return plc_tag_get_bit(tag_pointer, 0);
 	}
-
-	int32_t tag_pointer = tag.tag_pointer;
-	return plc_tag_get_bit(tag_pointer, 0);
+	return -1;
 }
 
 void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value) {
-	WriteRequest write_req = {
-		0,
-		p_tag_group_name,
-		p_tag_name,
-		p_value
-	};
-	write_queue.push(write_req);
+	if (enable_comms) {
+		WriteRequest write_req = {
+			0,
+			p_tag_group_name,
+			p_tag_name,
+			p_value
+		};
+		write_queue.push(write_req);
 
-	// a little ad hoc - but this forces all writes to flush prior to reading
-	tag_group_queue.push("");
+		// a little ad hoc - but this forces all writes to flush prior to reading
+		tag_group_queue.push("");
+	}
 }
 
 void OIPComms::process() {
-	uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
-	double delta = (current_ticks - last_ticks) / 1000.0f;
-	for (auto const &x : tag_groups) {
-		String tag_group_name = x.first;
-		tag_groups[tag_group_name].time += delta;
+	if (enable_comms) {
+		uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
+		double delta = (current_ticks - last_ticks) / 1000.0f;
+		for (auto const &x : tag_groups) {
+			String tag_group_name = x.first;
+			tag_groups[tag_group_name].time += delta;
 
-		if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
-			queue_tag_group(tag_group_name);
-			tag_groups[tag_group_name].time = 0.0f;
+			if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
+				queue_tag_group(tag_group_name);
+				tag_groups[tag_group_name].time = 0.0f;
+			}
 		}
+		last_ticks = current_ticks;
 	}
-	last_ticks = current_ticks;
+}
+
+void OIPComms::set_enable_comms(bool value) {
+	enable_comms = value;
+	if (value) {
+		UtilityFunctions::print("OIPComms: Communications enabled");
+	} else {
+		UtilityFunctions::print("OIPComms: Communications disabled");
+	}
+}
+
+bool OIPComms::get_enable_comms() {
+	return enable_comms;
 }

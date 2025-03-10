@@ -15,10 +15,15 @@ func _read_bit(_value: bool) -> void:
 
 @export var flip_bit := false: set = _flip_bit
 func _flip_bit(_value: bool) -> void:
-	OIPComms.write_bit("test", "TEST_INPUT", not OIPComms.read_bit("test", "TEST_INPUT"))
-	print(OIPComms.read_bit("test", "TEST_INPUT"))
+	#OIPComms.write_bit("test", "TEST_INPUT", not OIPComms.read_bit("test", "TEST_INPUT"))
+	#print(OIPComms.read_bit("test", "TEST_INPUT"))
+	OIPComms.write_bit("test", "TEST_INPUT", 0)
+	OIPComms.write_bit("test", "TEST_INPUT", 1)
+	OIPComms.write_bit("test", "TEST_INPUT", 0)
+	OIPComms.write_bit("test", "TEST_INPUT", 1)
 
 @export var test_editor := false: set = _test_editor
-func _test_editor(_value: bool) -> void:
-	
+func _test_editor(value: bool) -> void:
+	OIPComms.set_enable_comms(value)
+	test_editor = value
 	pass

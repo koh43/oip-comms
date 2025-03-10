@@ -58,6 +58,8 @@ private:
 
 	bool scene_signals_set = false;
 
+	bool enable_comms = false;
+
 	void watchdog();
 	void process_work();
 
@@ -75,12 +77,11 @@ protected:
 
 public:
 
-	void comm_test();
+	bool get_enable_comms();
+	void set_enable_comms(bool value);
 
 	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
-
 	void register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
-
 	int read_bit(const String p_tag_group_name, const String p_tag_name);
 	void write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
 

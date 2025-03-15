@@ -282,8 +282,8 @@ void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name,
 }
 */
 
-OIP_READ_FUNC(int, bit)
-OIP_WRITE_FUNC(bit, int, 0)
+OIP_READ_FUNC(bool, bit)
+OIP_WRITE_FUNC(bit, bool, 0)
 
 OIP_READ_FUNC(uint64_t, uint64)
 OIP_WRITE_FUNC(uint64, uint64_t, 1)

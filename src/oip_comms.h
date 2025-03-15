@@ -130,7 +130,7 @@ public:
 	void write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
 	 */
 
-	OIP_DECLARE_FUNC(bit, int)
+	OIP_DECLARE_FUNC(bit, bool)
 	OIP_DECLARE_FUNC(uint64, uint64_t)
 	OIP_DECLARE_FUNC(int64, int64_t)
 	OIP_DECLARE_FUNC(uint32, uint32_t)

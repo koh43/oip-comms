@@ -46,6 +46,8 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_enable_log", "value"), &OIPComms::set_enable_log);
 	ClassDB::bind_method(D_METHOD("get_enable_log"), &OIPComms::get_enable_log);
 
+	ClassDB::bind_method(D_METHOD("opc_ua_test"), &OIPComms::opc_ua_test);
+
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
@@ -379,4 +381,32 @@ void OIPComms::set_enable_log(bool value) {
 
 bool OIPComms::get_enable_log() {
 	return enable_log;
+}
+
+
+void OIPComms::opc_ua_test() {
+	UA_Client *client = UA_Client_new();
+	UA_ClientConfig_setDefault(UA_Client_getConfig(client));
+	UA_StatusCode retval = UA_Client_connect(client, "opc.tcp://192.168.56.104:62541");
+	if (retval != UA_STATUSCODE_GOOD) {
+				//"The connection failed with status code %s",
+				//UA_StatusCode_name(retval));
+		UA_Client_delete(client);
+		return;
+	}
+
+	UA_Variant value2;
+	UA_Variant_init(&value2);
+
+	const UA_NodeId nodeId2 = UA_NODEID_STRING(1, "[TEST]TEST_DINT");
+	retval = UA_Client_readValueAttribute(client, nodeId2, &value2);
+
+	if (retval == UA_STATUSCODE_GOOD) {
+		int32_t d = *(int32_t *)value2.data;
+		UtilityFunctions::print("test value ", d);
+		//UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_USERLAND, "test value %u", d);
+	}
+
+	UA_Variant_clear(&value2);
+	UA_Client_delete(client);
 }

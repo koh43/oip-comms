@@ -2,6 +2,7 @@
 #define OIP_COMMS_H
 
 #include "libplctag.h"
+#include "open62541.h"
 
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/thread.hpp>
@@ -141,6 +142,8 @@ public:
 	OIP_DECLARE_FUNC(int8, int8_t)
 	OIP_DECLARE_FUNC(float64, double)
 	OIP_DECLARE_FUNC(float32, float)
+
+	void opc_ua_test();
 
 	void process();
 

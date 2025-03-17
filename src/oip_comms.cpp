@@ -52,11 +52,11 @@ void OIPComms::_bind_methods() {
 OIPComms::OIPComms() {
 	// maybe using RefCounted here instead will make warnings go away?
 
-	print("OIPComms: Read thread start");
+	print("Read thread start");
 	work_thread.instantiate();
 	work_thread->start(callable_mp(this, &OIPComms::process_work));
 
-	print("OIPComms: Watchdog thread start");
+	print("Watchdog thread start");
 	watchdog_thread.instantiate();
 	watchdog_thread->start(callable_mp(this, &OIPComms::watchdog));
 }
@@ -70,7 +70,7 @@ OIPComms::~OIPComms() {
 
 	work_thread->wait_to_finish();
 	watchdog_thread->wait_to_finish();
-	print("OIPComms: Threads shutdown");
+	print("Threads shutdown");
 }
 
 void OIPComms::cleanup_tag_groups() {
@@ -129,7 +129,7 @@ void OIPComms::process_work() {
 			process_tag_group(tag_group_name);
 		} else {
 			if (tag_group_name.is_empty()) {
-				//print("Processing writes (no tag groups to be updated)");
+				print("Processing writes (no tag groups to be updated)");
 			} else {
 				print("Tag group not found: " + tag_group_name);
 			}
@@ -155,6 +155,12 @@ void OIPComms::flush_one_write() {
 
 void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
+
+	UA_StatusCode client_status;
+	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
+	if (client_status != UA_STATUSCODE_GOOD)
+		return;
+
 	OpcUaTag &tag = tag_group.opc_ua_tags[tag_path];
 	UA_StatusCode ret_val = UA_Client_writeValueAttribute(tag_group.client, tag.node_id, &(tag.value));
 	if (ret_val != UA_STATUSCODE_GOOD) {
@@ -167,7 +173,7 @@ void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_p
 	OpcUaTag &tag = tag_groups[tag_group_name].opc_ua_tags[tag_path]; \
 	b raw_value = (b)value; \
 	UA_StatusCode ret_val = UA_Variant_setScalarCopy(&(tag.value), &raw_value, &UA_TYPES[UA_TYPES_##c]); \
-	if (ret_val != UA_STATUSCODE_GOOD) print("OIP Comms: Failed to cast data for " + tag_path); \
+	if (ret_val != UA_STATUSCODE_GOOD) print("OIP Comms: Failed to cast data on write for " + tag_path); \
 	opc_write(tag_group_name, tag_path); \
 }
 
@@ -234,7 +240,7 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 		if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 			tag_groups[write_req.tag_group_name].plc_tags[write_req.tag_name].dirty = true;
 		} else {
-			print("OIPComms: Failed to write tag: " + write_req.tag_name);
+			print("Failed to write tag: " + write_req.tag_name);
 		}
 	}
 }
@@ -267,12 +273,12 @@ void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 
 			// failed to create tag
 			if (tag.tag_pointer < 0) {
-				print("OIPComms: Failed to create tag: " + tag_name);
-				print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+				print("Failed to create tag: " + tag_name);
+				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				if (!process_read(tag, tag_name)) {
-					print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+					print("Skipping remainder of tag group: " + tag_group_name);
 					break;
 				} else {
 					// if read was successful, the tag read is now clean
@@ -282,7 +288,7 @@ void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 		} else {
 			// tag is already initialized, now read it
 			if (!process_read(tag, tag_name)) {
-				print("OIPComms: Skipping remainder of tag group: " + tag_group_name);
+				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
 				// if read was successful, the tag read is now clean
@@ -307,13 +313,20 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 		ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
 		if (ret_val != UA_STATUSCODE_GOOD) {
 			print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
-			tag_group.client = nullptr;
+			//tag_group.client = nullptr;
 
 			// TBD -> don't delete this here, causes a crash - not sure why entirely
 			//UA_Client_delete(tag_group.client);
-			return;
 		}
 	}
+
+	if (tag_group.client == nullptr)
+		return;
+
+	UA_StatusCode client_status;
+	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
+	if (client_status != UA_STATUSCODE_GOOD)
+		return;
 
 	for (auto &x : tag_group.opc_ua_tags) {
 		const String tag_path = x.first;
@@ -338,7 +351,7 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 bool OIPComms::process_read(const PlcTag &tag, const String &tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
-		print("OIPComms: Failed to read tag: " + tag_name);
+		print("Failed to read tag: " + tag_name);
 		return false;
 	}
 	return true;
@@ -346,7 +359,7 @@ bool OIPComms::process_read(const PlcTag &tag, const String &tag_name) {
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		print("OIPComms: Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
+		print("Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
 		cleanup_tag_group(p_tag_group_name);
 	}
 
@@ -370,14 +383,20 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		PlcTag tag = {
-			-1,
-			p_elem_count
-		};
-		tag_groups[p_tag_group_name].plc_tags[p_tag_name] = tag;
+		TagGroup &tag_group = tag_groups[p_tag_group_name];
+		if (tag_group.protocol == "opc_ua") {
+			OpcUaTag tag = { false, UA_NODEID_NULL, { 0 } };
+			tag_groups[p_tag_group_name].opc_ua_tags[p_tag_name] = tag;
+		} else {
+			PlcTag tag = {
+				-1,
+				p_elem_count
+			};
+			tag_groups[p_tag_group_name].plc_tags[p_tag_name] = tag;
+		}
 		return true;
 	} else {
-		print("OIPComms: Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");
+		print("Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");
 		return false;
 	}
 }
@@ -404,7 +423,7 @@ void OIPComms::process() {
 
 void OIPComms::print(const Variant &message) {
 	if (enable_log) {
-		UtilityFunctions::print(message);
+		UtilityFunctions::print("OIPComms: " + String(message));
 	}
 }
 
@@ -412,9 +431,9 @@ void OIPComms::print(const Variant &message) {
 void OIPComms::set_enable_comms(bool value) {
 	enable_comms = value;
 	if (value) {
-		print("OIPComms: Communications enabled");
+		print("Communications enabled");
 	} else {
-		print("OIPComms: Communications disabled");
+		print("Communications disabled");
 	}
 }
 
@@ -425,9 +444,9 @@ bool OIPComms::get_enable_comms() {
 void OIPComms::set_sim_running(bool value) {
 	sim_running = value;
 	if (value) {
-		print("OIPComms: Sim running");
+		print("Sim running");
 	} else {
-		print("OIPComms: Sim stopped");
+		print("Sim stopped");
 	}
 }
 
@@ -439,9 +458,9 @@ void OIPComms::set_enable_log(bool value) {
 	enable_log = value;
 	if (value) {
 		// use UtilityFunctions so we can actually see the disabled message
-		UtilityFunctions::print("OIPComms: Logging enabled");
+		UtilityFunctions::print("Logging enabled");
 	} else {
-		UtilityFunctions::print("OIPComms: Logging disabled");
+		UtilityFunctions::print("Logging disabled");
 	}
 
 }

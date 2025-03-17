@@ -64,6 +64,8 @@ OIPComms::OIPComms() {
 }
 
 OIPComms::~OIPComms() {
+	cleanup_tag_groups();
+
 	watchdog_thread_running = false;
 	work_thread_running = false;
 	tag_group_queue.shutdown();
@@ -71,6 +73,33 @@ OIPComms::~OIPComms() {
 	work_thread->wait_to_finish();
 	watchdog_thread->wait_to_finish();
 	print("OIPComms: Threads shutdown");
+}
+
+void OIPComms::cleanup_tag_groups() {
+	for (auto const &x : tag_groups) {
+		const String tag_group_name = x.first;
+		cleanup_tag_group(tag_group_name);
+	}
+}
+
+void OIPComms::cleanup_tag_group(const String &tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	if (tag_group.protocol == "opc_ua") {
+		for (auto &x : tag_group.opc_ua_tags) {
+			OpcUaTag &tag = x.second;
+			UA_Variant_clear(&tag.value);
+		}
+
+		if (tag_group.client != nullptr) {
+			UA_Client_delete(tag_group.client);
+		}
+
+	} else {
+		for (auto &x : tag_group.plc_tags) {
+			PlcTag &tag = x.second;
+			plc_tag_destroy(tag.tag_pointer);
+		}
+	}
 }
 
 void OIPComms::watchdog() {
@@ -126,68 +155,111 @@ void OIPComms::flush_one_write() {
 	}
 }
 
+void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	OpcUaTag &tag = tag_group.opc_ua_tags[tag_path];
+	UA_Client_writeValueAttribute(tag_group.client, tag.node_id, &tag.value);
+}
+
+#define OIP_OPC_SET(a, b, c) \
+void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant &value) { \
+	OpcUaTag &tag = tag_groups[tag_group_name].opc_ua_tags[tag_path]; \
+	b raw_value = (b)value; \
+	UA_Variant_setScalarCopy(&tag.value, &raw_value, &UA_TYPES[UA_TYPES_##c]); \
+	opc_write(tag_group_name, tag_path); \
+}
+
+OIP_OPC_SET(bit, bool, BOOLEAN)
+OIP_OPC_SET(uint64, uint64_t, UINT64)
+OIP_OPC_SET(int64, int64_t, INT64)
+OIP_OPC_SET(uint32, uint32_t, UINT32)
+OIP_OPC_SET(int32, int32_t, INT32)
+OIP_OPC_SET(uint16, uint16_t, UINT16)
+OIP_OPC_SET(int16, int16_t, INT16)
+OIP_OPC_SET(uint8, uint8_t, UINT16) // there's no 8 bit integer types in OPC UA
+OIP_OPC_SET(int8, int8_t, INT16)
+OIP_OPC_SET(float64, double, DOUBLE)
+OIP_OPC_SET(float32, float, FLOAT)
+
+#define OIP_OPC_SET_CALL(a) \
+if (tag_group.protocol == "opc_ua") { \
+	opc_tag_set_##a(write_req.tag_group_name, write_req.tag_name, write_req.value); \
+	} else { \
+	plc_tag_set_##a(tag_pointer, 0, write_req.value);                               \
+	} \
+
 void OIPComms::process_write(const WriteRequest &write_req) {
-	int32_t tag_pointer = tag_groups[write_req.tag_group_name].tags[write_req.tag_name].tag_pointer;
+	TagGroup &tag_group = tag_groups[write_req.tag_group_name];
+
+	int32_t tag_pointer = tag_group.plc_tags[write_req.tag_name].tag_pointer;
 	switch (write_req.instruction) {
 		case 0:
-			plc_tag_set_bit(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(bit)
 			break;
 		case 1:
-			plc_tag_set_uint64(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(uint64)
 			break;
 		case 2:
-			plc_tag_set_int64(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(int64)
 			break;
 		case 3:
-			plc_tag_set_uint32(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(uint32)
 			break;
 		case 4:
-			plc_tag_set_int32(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(int32)
 			break;
 		case 5:
-			plc_tag_set_uint16(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(uint16)
 			break;
 		case 6:
-			plc_tag_set_int16(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(int16)
 			break;
 		case 7:
-			plc_tag_set_uint8(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(uint8)
 			break;
 		case 8:
-			plc_tag_set_int8(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(int8)
 			break;
 		case 9:
-			plc_tag_set_float64(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(float64)
 			break;
 		case 10:
-			plc_tag_set_float32(tag_pointer, 0, write_req.value);
+			OIP_OPC_SET_CALL(float32)
 			break;
 
 	}
 	if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
-		tag_groups[write_req.tag_group_name].tags[write_req.tag_name].dirty = true;
+		tag_groups[write_req.tag_group_name].plc_tags[write_req.tag_name].dirty = true;
 	} else {
 		print("OIPComms: Failed to write tag: " + write_req.tag_name);
 	}
 }
 
-void OIPComms::queue_tag_group(const String tag_group_name) {
+void OIPComms::queue_tag_group(const String &tag_group_name) {
 	tag_group_queue.push(tag_group_name);
 }
 
-void OIPComms::process_tag_group(const String tag_group_name) {
-	TagGroup tag_group = tag_groups[tag_group_name];
+void OIPComms::process_tag_group(const String &tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	if (tag_group.protocol == "opc_ua") {
+		process_opc_ua_tag_group(tag_group_name);
+	} else {
+		process_plc_tag_group(tag_group_name);
+	}
+}
 
+void OIPComms::process_plc_tag_group(const String &tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
 	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
-	//print("Process tag group " + tag_group_name);
-	for (auto const &x : tag_group.tags) {
-		String tag_name = x.first;
-		Tag tag = x.second;
+	for (auto &x : tag_group.plc_tags) {
+		const String tag_name = x.first;
+		PlcTag &tag = x.second;
 
 		// tag is not initialized
 		if (tag.tag_pointer < 0) {
 			String tag_path = group_tag_path + itos(tag.elem_count) + "&name=" + tag_name;
-			tag.tag_pointer = tag_groups[tag_group_name].tags[tag_name].tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
+
+			tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
 
 			// failed to create tag
 			if (tag.tag_pointer < 0) {
@@ -200,7 +272,7 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 					break;
 				} else {
 					// if read was successful, the tag read is now clean
-					tag_groups[tag_group_name].tags[tag_name].dirty = false;
+					tag.dirty = false;
 				}
 			}
 		} else {
@@ -210,13 +282,53 @@ void OIPComms::process_tag_group(const String tag_group_name) {
 				break;
 			} else {
 				// if read was successful, the tag read is now clean
-				tag_groups[tag_group_name].tags[tag_name].dirty = false;
+				tag.dirty = false;
 			}
 		}
 	}
 }
 
-bool OIPComms::process_read(const Tag &tag, const String tag_name) {
+void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+
+	UA_StatusCode ret_val = UA_STATUSCODE_BAD;
+	if (tag_group.client == nullptr) {
+		tag_group.client = UA_Client_new();
+
+		UA_ClientConfig *config = UA_Client_getConfig(tag_group.client);
+		UA_ClientConfig_setDefault(config);
+		//config->logging = nullptr;
+
+		const char *endpoint_URL = tag_group.gateway.utf8().get_data();
+		ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
+		if (ret_val != UA_STATUSCODE_GOOD) {
+			print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
+			UA_Client_delete(tag_group.client);
+			return;
+		}
+	}
+
+	for (auto &x : tag_group.opc_ua_tags) {
+		const String tag_path = x.first;
+		OpcUaTag &tag = x.second;
+
+		if (!tag.initialized) {
+			UA_Variant_init(&tag.value);
+
+			tag.node_id = UA_NODEID_STRING((uint16_t)tag_group.path.to_int(), tag_path.utf8().ptrw());
+			tag.initialized = true;
+		}
+
+		if (tag.initialized) {
+			ret_val = UA_Client_readValueAttribute(tag_group.client, tag.node_id, &tag.value);
+			if (ret_val != UA_STATUSCODE_GOOD) {
+				UtilityFunctions::print("OIP Comms: OPC UA failed to read " + tag_path);
+			}
+		}
+	}
+}
+
+bool OIPComms::process_read(const PlcTag &tag, const String &tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
 		print("OIPComms: Failed to read tag: " + tag_name);
@@ -228,16 +340,22 @@ bool OIPComms::process_read(const Tag &tag, const String tag_name) {
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
 		print("OIPComms: Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
+		cleanup_tag_group(p_tag_group_name);
 	}
 
 	TagGroup tag_group = {
 		p_polling_interval,
 		p_polling_interval * 1.0f, // initialize time to polling time and it should kick an initial read
 		p_protocol,
+
 		p_gateway,
+
 		p_path,
 		p_cpu,
-		std::map<String, Tag>()
+		std::map<String, PlcTag>(),
+
+		nullptr,
+		std::map<String, OpcUaTag>()
 	};
 
 	tag_groups[p_tag_group_name] = tag_group;
@@ -245,11 +363,11 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		Tag tag = {
+		PlcTag tag = {
 			-1,
 			p_elem_count
 		};
-		tag_groups[p_tag_group_name].tags[p_tag_name] = tag;
+		tag_groups[p_tag_group_name].plc_tags[p_tag_name] = tag;
 		return true;
 	} else {
 		print("OIPComms: Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");
@@ -257,78 +375,20 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 	}
 }
 
-/* Original functions - if needed to debug
-
-int OIPComms::read_bit(const String p_tag_group_name, const String p_tag_name) {
-	if (enable_comms && sim_running) {
-		Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];
-
-		int32_t tag_pointer = tag.tag_pointer;
-		return plc_tag_get_bit(tag_pointer, 0);
-	}
-	return -1;
-}
-
-void OIPComms::write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value) {
-	if (enable_comms && sim_running) {
-		WriteRequest write_req = {
-			0,
-			p_tag_group_name,
-			p_tag_name,
-			p_value
-		};
-		write_queue.push(write_req);
-
-		tag_group_queue.push("");
-	}
-}
-*/
-
-OIP_READ_FUNC(bool, bit)
-OIP_WRITE_FUNC(bit, bool, 0)
-
-OIP_READ_FUNC(uint64_t, uint64)
-OIP_WRITE_FUNC(uint64, uint64_t, 1)
-
-OIP_READ_FUNC(int64_t, int64)
-OIP_WRITE_FUNC(int64, int64_t, 2)
-
-OIP_READ_FUNC(uint32_t, uint32)
-OIP_WRITE_FUNC(uint32, uint32_t, 3)
-
-OIP_READ_FUNC(int32_t, int32)
-OIP_WRITE_FUNC(int32, int32_t, 4)
-
-OIP_READ_FUNC(uint16_t, uint16)
-OIP_WRITE_FUNC(uint16, uint16_t, 5)
-
-OIP_READ_FUNC(int16_t, int16)
-OIP_WRITE_FUNC(int16, int16_t, 6)
-
-OIP_READ_FUNC(uint8_t, uint8)
-OIP_WRITE_FUNC(uint8, uint8_t, 7)
-
-OIP_READ_FUNC(int8_t, int8)
-OIP_WRITE_FUNC(int8, int8_t, 8)
-
-OIP_READ_FUNC(double, float64)
-OIP_WRITE_FUNC(float64, double, 9)
-
-OIP_READ_FUNC(float, float32)
-OIP_WRITE_FUNC(float32, float, 10)
-
 void OIPComms::process() {
 	if (enable_comms && sim_running) {
 		uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
 		double delta = (current_ticks - last_ticks) / 1000.0f;
-		for (auto const &x : tag_groups) {
-			String tag_group_name = x.first;
-			tag_groups[tag_group_name].time += delta;
+		for (auto &x : tag_groups) {
+			const String tag_group_name = x.first;
+			TagGroup &tag_group = x.second;
+
+			tag_group.time += delta;
 				
-			if (tag_groups[tag_group_name].time >= tag_groups[tag_group_name].polling_interval) {
+			if (tag_group.time >= tag_group.polling_interval) {
 				queue_tag_group(tag_group_name);
 				emit_signal("tag_group_polled", tag_group_name);
-				tag_groups[tag_group_name].time = 0.0f;
+				tag_group.time = 0.0f;
 			}
 		}
 		last_ticks = current_ticks;
@@ -383,14 +443,15 @@ bool OIPComms::get_enable_log() {
 	return enable_log;
 }
 
-
 void OIPComms::opc_ua_test() {
 	UA_Client *client = UA_Client_new();
+
 	UA_ClientConfig_setDefault(UA_Client_getConfig(client));
+
 	UA_StatusCode retval = UA_Client_connect(client, "opc.tcp://192.168.56.104:62541");
 	if (retval != UA_STATUSCODE_GOOD) {
-				//"The connection failed with status code %s",
-				//UA_StatusCode_name(retval));
+		//"The connection failed with status code %s",
+		//UA_StatusCode_name(retval));
 		UA_Client_delete(client);
 		return;
 	}
@@ -410,3 +471,76 @@ void OIPComms::opc_ua_test() {
 	UA_Variant_clear(&value2);
 	UA_Client_delete(client);
 }
+
+// --- OIP READ/WRITES
+
+/*
+
+
+return -1;\
+*/
+
+#define OIP_READ_FUNC(a, b)                                                        \
+	a OIPComms::read_##b(const String p_tag_group_name, const String p_tag_name) { \
+		if (enable_comms && sim_running) {                                         \
+			TagGroup &tag_group = tag_groups[p_tag_group_name];                    \
+			if (tag_group.protocol == "opc_ua") {                                  \
+				OpcUaTag &tag = tag_group.opc_ua_tags[p_tag_name];                 \
+				if (tag.initialized) {                                             \
+					return *(a *)tag.value.data; \
+				} else { return -1; } \
+			} else {                                                               \
+				PlcTag &tag = tag_group.plc_tags[p_tag_name];                      \
+				int32_t tag_pointer = tag.tag_pointer;                             \
+				return plc_tag_get_##b(tag_pointer, 0);                            \
+			}                                                                      \
+		}                                                                          \
+		return -1;                                                                 \
+	}
+
+#define OIP_WRITE_FUNC(a, b, c)                                                                         \
+	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) { \
+		if (enable_comms && sim_running) {                                                              \
+			WriteRequest write_req = {                                                                  \
+				c,                                                                                      \
+				p_tag_group_name,                                                                       \
+				p_tag_name,                                                                             \
+				p_value                                                                                 \
+			};                                                                                          \
+			write_queue.push(write_req);                                                                \
+			tag_group_queue.push("");                                                                   \
+		}                                                                                               \
+	}
+
+OIP_READ_FUNC(bool, bit)
+OIP_WRITE_FUNC(bit, bool, 0)
+
+OIP_READ_FUNC(uint64_t, uint64)
+OIP_WRITE_FUNC(uint64, uint64_t, 1)
+
+OIP_READ_FUNC(int64_t, int64)
+OIP_WRITE_FUNC(int64, int64_t, 2)
+
+OIP_READ_FUNC(uint32_t, uint32)
+OIP_WRITE_FUNC(uint32, uint32_t, 3)
+
+OIP_READ_FUNC(int32_t, int32)
+OIP_WRITE_FUNC(int32, int32_t, 4)
+
+OIP_READ_FUNC(uint16_t, uint16)
+OIP_WRITE_FUNC(uint16, uint16_t, 5)
+
+OIP_READ_FUNC(int16_t, int16)
+OIP_WRITE_FUNC(int16, int16_t, 6)
+
+OIP_READ_FUNC(uint8_t, uint8)
+OIP_WRITE_FUNC(uint8, uint8_t, 7)
+
+OIP_READ_FUNC(int8_t, int8)
+OIP_WRITE_FUNC(int8, int8_t, 8)
+
+OIP_READ_FUNC(double, float64)
+OIP_WRITE_FUNC(float64, double, 9)
+
+OIP_READ_FUNC(float, float32)
+OIP_WRITE_FUNC(float32, float, 10)

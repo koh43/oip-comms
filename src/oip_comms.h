@@ -13,34 +13,6 @@
 
 #include "oip_blocking_queue.h"
 
-#define OIP_READ_FUNC(a, b)                                                        \
-	a OIPComms::read_##b(const String p_tag_group_name, const String p_tag_name) { \
-		if (enable_comms && sim_running) {                                         \
-			Tag tag = tag_groups[p_tag_group_name].tags[p_tag_name];               \
-			int32_t tag_pointer = tag.tag_pointer;                                 \
-			return plc_tag_get_##b(tag_pointer, 0);                                \
-		}                                                                          \
-		return -1;                                                                 \
-	}
-
-#define OIP_WRITE_FUNC(a, b, c)                                                                         \
-	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) { \
-		if (enable_comms && sim_running) {                                                              \
-			WriteRequest write_req = {                                                                  \
-				c,                                                                                      \
-				p_tag_group_name,                                                                       \
-				p_tag_name,                                                                             \
-				p_value                                                                                 \
-			};                                                                                          \
-			write_queue.push(write_req);                                                                \
-			tag_group_queue.push("");                                                                   \
-		}                                                                                               \
-	}
-
-#define OIP_DECLARE_FUNC(a, b)                                            \
-	b read_##a(const String p_tag_group_name, const String p_tag_name); \
-	void write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value);
-
 namespace godot {
 
 class OIPComms : public Node {
@@ -49,8 +21,8 @@ class OIPComms : public Node {
 private:
 	int timeout = 5000;
 
-	struct Tag {
-		int32_t tag_pointer;
+	struct PlcTag {
+		int32_t tag_pointer = -1;
 		int elem_count;
 
 		// tag becomes dirty when a write happens before the next polled read
@@ -59,15 +31,31 @@ private:
 		bool dirty;
 	};
 
+	struct OpcUaTag {
+		bool initialized = false;
+		UA_NodeId node_id;
+		UA_Variant value;
+	};
+
 	struct TagGroup {
 		int polling_interval;
 		double time;
 		String protocol;
-		String gateway;
-		String path;
-		String cpu;
 
-		std::map<String, Tag> tags;
+		// gateway is a multi-purpose field. either the IP address of a PLC, "192.168.1.200"
+		// or the address of an OPC UA server endpoint, "opc.tcp://192.168.56.104:62541"
+		String gateway;
+
+		// path is a multi-purpose field. it is the rack/slot number of a PLC, "1,2"
+		// or the namespace address of an OPC UA server, "1"
+		String path;
+
+		String cpu;
+		std::map<String, PlcTag> plc_tags;
+
+		UA_Client *client;
+		std::map<String, OpcUaTag> opc_ua_tags;
+
 	};
 	std::map<String, TagGroup> tag_groups;
 
@@ -99,13 +87,35 @@ private:
 	void watchdog();
 	void process_work();
 
-	void process_tag_group(const String tag_group_name);
-	void queue_tag_group(const String tag_group_name);
+	void process_tag_group(const String &tag_group_name);
+	void process_plc_tag_group(const String &tag_group_name);
+	void process_opc_ua_tag_group(const String &tag_group_name);
+
+	void queue_tag_group(const String &tag_group_name);
 
 	void flush_all_writes();
 	void flush_one_write();
-	void process_write(const WriteRequest& write_req);
-	bool process_read(const Tag &tag, const String tag_name);
+	void process_write(const WriteRequest &write_req);
+	bool process_read(const PlcTag &tag, const String &tag_name);
+
+	void opc_write(const String &tag_group_name, const String &tag_path);
+
+#define OIP_DECLARE_OPC_SET(a)void opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant &value);
+
+	OIP_DECLARE_OPC_SET(bit)
+	OIP_DECLARE_OPC_SET(uint64)
+	OIP_DECLARE_OPC_SET(int64)
+	OIP_DECLARE_OPC_SET(uint32)
+	OIP_DECLARE_OPC_SET(int32)
+	OIP_DECLARE_OPC_SET(uint16)
+	OIP_DECLARE_OPC_SET(int16)
+	OIP_DECLARE_OPC_SET(uint8)
+	OIP_DECLARE_OPC_SET(int8)
+	OIP_DECLARE_OPC_SET(float64)
+	OIP_DECLARE_OPC_SET(float32)
+
+	void cleanup_tag_groups();
+	void cleanup_tag_group(const String &tag_group_name);
 
 	void print(const Variant &message);
 
@@ -126,10 +136,16 @@ public:
 	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
 	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 
-	/* original definitions
-	int read_bit(const String p_tag_group_name, const String p_tag_name);
-	void write_bit(const String p_tag_group_name, const String p_tag_name, const int p_value);
-	 */
+	void opc_ua_test();
+
+	void process();
+
+	OIPComms();
+	~OIPComms();
+
+#define OIP_DECLARE_FUNC(a, b)                                          \
+	b read_##a(const String p_tag_group_name, const String p_tag_name); \
+	void write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value);
 
 	OIP_DECLARE_FUNC(bit, bool)
 	OIP_DECLARE_FUNC(uint64, uint64_t)
@@ -142,13 +158,6 @@ public:
 	OIP_DECLARE_FUNC(int8, int8_t)
 	OIP_DECLARE_FUNC(float64, double)
 	OIP_DECLARE_FUNC(float32, float)
-
-	void opc_ua_test();
-
-	void process();
-
-	OIPComms();
-	~OIPComms();
 
 };
 

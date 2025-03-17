@@ -100,7 +100,7 @@ private:
 
 	void opc_write(const String &tag_group_name, const String &tag_path);
 
-#define OIP_DECLARE_OPC_SET(a)void opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant &value);
+#define OIP_DECLARE_OPC_SET(a)void opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant value);
 
 	OIP_DECLARE_OPC_SET(bit)
 	OIP_DECLARE_OPC_SET(uint64)
@@ -137,6 +137,8 @@ public:
 	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 
 	void process();
+
+	void opc_ua_test();
 
 	OIPComms();
 	~OIPComms();

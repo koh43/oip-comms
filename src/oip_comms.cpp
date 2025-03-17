@@ -307,7 +307,10 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 		ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
 		if (ret_val != UA_STATUSCODE_GOOD) {
 			print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
-			UA_Client_delete(tag_group.client);
+			tag_group.client = nullptr;
+
+			// TBD -> don't delete this here, causes a crash - not sure why entirely
+			//UA_Client_delete(tag_group.client);
 			return;
 		}
 	}

@@ -136,8 +136,6 @@ public:
 	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
 	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 
-	void opc_ua_test();
-
 	void process();
 
 	OIPComms();

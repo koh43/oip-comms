@@ -9,48 +9,6 @@
 
 using namespace godot;
 
-void OIPComms::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("register_tag_group", "tag_group_name", "polling_interval", "protocol", "gateway", "path", "cpu"), &OIPComms::register_tag_group);
-	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
-
-	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
-	ClassDB::bind_method(D_METHOD("read_uint64", "tag_group_name", "tag_name"), &OIPComms::read_uint64);
-	ClassDB::bind_method(D_METHOD("read_int64", "tag_group_name", "tag_name"), &OIPComms::read_int64);
-	ClassDB::bind_method(D_METHOD("read_uint32", "tag_group_name", "tag_name"), &OIPComms::read_uint32);
-	ClassDB::bind_method(D_METHOD("read_int32", "tag_group_name", "tag_name"), &OIPComms::read_int32);
-	ClassDB::bind_method(D_METHOD("read_uint16", "tag_group_name", "tag_name"), &OIPComms::read_uint16);
-	ClassDB::bind_method(D_METHOD("read_int16", "tag_group_name", "tag_name"), &OIPComms::read_int16);
-	ClassDB::bind_method(D_METHOD("read_uint8", "tag_group_name", "tag_name"), &OIPComms::read_uint8);
-	ClassDB::bind_method(D_METHOD("read_int8", "tag_group_name", "tag_name"), &OIPComms::read_int8);
-	ClassDB::bind_method(D_METHOD("read_float64", "tag_group_name", "tag_name"), &OIPComms::read_float64);
-	ClassDB::bind_method(D_METHOD("read_float32", "tag_group_name", "tag_name"), &OIPComms::read_float32);
-
-	ClassDB::bind_method(D_METHOD("write_bit", "tag_group_name", "tag_name", "value"), &OIPComms::write_bit);
-	ClassDB::bind_method(D_METHOD("write_uint64", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint64);
-	ClassDB::bind_method(D_METHOD("write_int64", "tag_group_name", "tag_name", "value"), &OIPComms::write_int64);
-	ClassDB::bind_method(D_METHOD("write_uint32", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint32);
-	ClassDB::bind_method(D_METHOD("write_int32", "tag_group_name", "tag_name", "value"), &OIPComms::write_int32);
-	ClassDB::bind_method(D_METHOD("write_uint16", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint16);
-	ClassDB::bind_method(D_METHOD("write_int16", "tag_group_name", "tag_name", "value"), &OIPComms::write_int16);
-	ClassDB::bind_method(D_METHOD("write_uint8", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint8);
-	ClassDB::bind_method(D_METHOD("write_int8", "tag_group_name", "tag_name", "value"), &OIPComms::write_int8);
-	ClassDB::bind_method(D_METHOD("write_float64", "tag_group_name", "tag_name", "value"), &OIPComms::write_float64);
-	ClassDB::bind_method(D_METHOD("write_float32", "tag_group_name", "tag_name", "value"), &OIPComms::write_float32);
-
-	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
-	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
-
-	ClassDB::bind_method(D_METHOD("set_sim_running", "value"), &OIPComms::set_sim_running);
-	ClassDB::bind_method(D_METHOD("get_sim_running"), &OIPComms::get_sim_running);
-
-	ClassDB::bind_method(D_METHOD("set_enable_log", "value"), &OIPComms::set_enable_log);
-	ClassDB::bind_method(D_METHOD("get_enable_log"), &OIPComms::get_enable_log);
-
-	ClassDB::bind_method(D_METHOD("opc_ua_test"), &OIPComms::opc_ua_test);
-
-	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
-}
-
 OIPComms::OIPComms() {
 	// maybe using RefCounted here instead will make warnings go away?
 
@@ -139,6 +97,10 @@ void OIPComms::process_work() {
 	}
 }
 
+void OIPComms::queue_tag_group(const String &tag_group_name) {
+	tag_group_queue.push(tag_group_name);
+}
+
 void OIPComms::flush_all_writes() {
 	while (!write_queue.empty()) {
 		WriteRequest write_req = write_queue.front();
@@ -147,6 +109,7 @@ void OIPComms::flush_all_writes() {
 	}
 }
 
+// not currently used but might considering flushing one write for each read
 void OIPComms::flush_one_write() {
 	if (!write_queue.empty()) {
 		WriteRequest write_req = write_queue.front();
@@ -177,16 +140,21 @@ void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
 void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant value) { \
 	if (value.get_type() == Variant::##d) { \
 		OpcUaTag &tag = tag_groups[tag_group_name].opc_ua_tags[tag_path]; \
-		if (!tag.initialized) \
-			return; \
+		if (!tag.initialized) return; \
 		b raw_value = (b)value; \
 		UA_StatusCode ret_val = UA_Variant_setScalarCopy(&(tag.value), &raw_value, &UA_TYPES[UA_TYPES_##c]); \
 		if (ret_val != UA_STATUSCODE_GOOD) \
 			print("OIP Comms: Failed to cast data on write for " + tag_path); \
 		opc_write(tag_group_name, tag_path); \
+	} else { \
+		print("OIP Comms: Supplied data type incorrect for " + tag_path); \
 	} \
 }
 
+/* Data marshalling is a giant PITA in this project
+libplctag, open62541 and Godot have different names for each of the fundamental data types
+Godot variants support direct casting, while open62541 needs to use UA_Variant_setScalarCopy()
+*/
 OIP_OPC_SET(bit, bool, BOOLEAN, BOOL)
 OIP_OPC_SET(uint64, uint64_t, UINT64, INT)
 OIP_OPC_SET(int64, int64_t, INT64, INT)
@@ -256,10 +224,6 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 	}
 }
 
-void OIPComms::queue_tag_group(const String &tag_group_name) {
-	tag_group_queue.push(tag_group_name);
-}
-
 void OIPComms::process_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
 	if (tag_group.protocol == "opc_ua") {
@@ -288,7 +252,7 @@ void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
-				if (!process_read(tag, tag_name)) {
+				if (!process_plc_read(tag, tag_name)) {
 					print("Skipping remainder of tag group: " + tag_group_name);
 					break;
 				} else {
@@ -298,7 +262,7 @@ void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 			}
 		} else {
 			// tag is already initialized, now read it
-			if (!process_read(tag, tag_name)) {
+			if (!process_plc_read(tag, tag_name)) {
 				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
 			} else {
@@ -313,6 +277,9 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
 
 	UA_StatusCode ret_val = UA_STATUSCODE_BAD;
+
+	// this will only attempt to generate a new client ONCE
+	// even if the operation fails, tag_group.client will not be a nullptr on the next pass
 	if (tag_group.client == nullptr) {
 		tag_group.client = UA_Client_new();
 
@@ -324,16 +291,19 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 		ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
 		if (ret_val != UA_STATUSCODE_GOOD) {
 			print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
-			//tag_group.client = nullptr;
 
 			// TBD -> don't delete this here, causes a crash - not sure why entirely
+			// this might lead to a tiny memory leak, for the client that fails to connect
+			// will be cleaned up the next time the sim is ran
 			//UA_Client_delete(tag_group.client);
 		}
 	}
 
+	// not sure if this check is needed
 	if (tag_group.client == nullptr)
 		return;
 
+	// ensure that the client is actually connected before proceeding
 	UA_StatusCode client_status;
 	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
 	if (client_status != UA_STATUSCODE_GOOD)
@@ -359,13 +329,81 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 	}
 }
 
-bool OIPComms::process_read(const PlcTag &tag, const String &tag_name) {
+bool OIPComms::process_plc_read(const PlcTag &tag, const String &tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
 		print("Failed to read tag: " + tag_name);
 		return false;
 	}
 	return true;
+}
+
+void OIPComms::process() {
+	if (enable_comms && sim_running) {
+		uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
+		double delta = (current_ticks - last_ticks) / 1000.0f;
+		for (auto &x : tag_groups) {
+			const String tag_group_name = x.first;
+			TagGroup &tag_group = x.second;
+
+			tag_group.time += delta;
+			
+			if (tag_group.time >= tag_group.polling_interval) {
+				queue_tag_group(tag_group_name);
+				emit_signal("tag_group_polled", tag_group_name);
+				tag_group.time = 0.0f;
+			}
+		}
+		last_ticks = current_ticks;
+	}
+}
+
+void OIPComms::print(const Variant &message) {
+	if (enable_log) {
+		UtilityFunctions::print("OIPComms: " + String(message));
+	}
+}
+
+// --- GDSCRIPT BOUND FUNCTIONS
+
+void OIPComms::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("register_tag_group", "tag_group_name", "polling_interval", "protocol", "gateway", "path", "cpu"), &OIPComms::register_tag_group);
+	ClassDB::bind_method(D_METHOD("register_tag", "tag_group_name", "tag_name", "elem_count"), &OIPComms::register_tag);
+
+	ClassDB::bind_method(D_METHOD("set_enable_comms", "value"), &OIPComms::set_enable_comms);
+	ClassDB::bind_method(D_METHOD("get_enable_comms"), &OIPComms::get_enable_comms);
+
+	ClassDB::bind_method(D_METHOD("set_sim_running", "value"), &OIPComms::set_sim_running);
+	ClassDB::bind_method(D_METHOD("get_sim_running"), &OIPComms::get_sim_running);
+
+	ClassDB::bind_method(D_METHOD("set_enable_log", "value"), &OIPComms::set_enable_log);
+	ClassDB::bind_method(D_METHOD("get_enable_log"), &OIPComms::get_enable_log);
+
+	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
+	ClassDB::bind_method(D_METHOD("read_uint64", "tag_group_name", "tag_name"), &OIPComms::read_uint64);
+	ClassDB::bind_method(D_METHOD("read_int64", "tag_group_name", "tag_name"), &OIPComms::read_int64);
+	ClassDB::bind_method(D_METHOD("read_uint32", "tag_group_name", "tag_name"), &OIPComms::read_uint32);
+	ClassDB::bind_method(D_METHOD("read_int32", "tag_group_name", "tag_name"), &OIPComms::read_int32);
+	ClassDB::bind_method(D_METHOD("read_uint16", "tag_group_name", "tag_name"), &OIPComms::read_uint16);
+	ClassDB::bind_method(D_METHOD("read_int16", "tag_group_name", "tag_name"), &OIPComms::read_int16);
+	ClassDB::bind_method(D_METHOD("read_uint8", "tag_group_name", "tag_name"), &OIPComms::read_uint8);
+	ClassDB::bind_method(D_METHOD("read_int8", "tag_group_name", "tag_name"), &OIPComms::read_int8);
+	ClassDB::bind_method(D_METHOD("read_float64", "tag_group_name", "tag_name"), &OIPComms::read_float64);
+	ClassDB::bind_method(D_METHOD("read_float32", "tag_group_name", "tag_name"), &OIPComms::read_float32);
+
+	ClassDB::bind_method(D_METHOD("write_bit", "tag_group_name", "tag_name", "value"), &OIPComms::write_bit);
+	ClassDB::bind_method(D_METHOD("write_uint64", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint64);
+	ClassDB::bind_method(D_METHOD("write_int64", "tag_group_name", "tag_name", "value"), &OIPComms::write_int64);
+	ClassDB::bind_method(D_METHOD("write_uint32", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint32);
+	ClassDB::bind_method(D_METHOD("write_int32", "tag_group_name", "tag_name", "value"), &OIPComms::write_int32);
+	ClassDB::bind_method(D_METHOD("write_uint16", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint16);
+	ClassDB::bind_method(D_METHOD("write_int16", "tag_group_name", "tag_name", "value"), &OIPComms::write_int16);
+	ClassDB::bind_method(D_METHOD("write_uint8", "tag_group_name", "tag_name", "value"), &OIPComms::write_uint8);
+	ClassDB::bind_method(D_METHOD("write_int8", "tag_group_name", "tag_name", "value"), &OIPComms::write_int8);
+	ClassDB::bind_method(D_METHOD("write_float64", "tag_group_name", "tag_name", "value"), &OIPComms::write_float64);
+	ClassDB::bind_method(D_METHOD("write_float32", "tag_group_name", "tag_name", "value"), &OIPComms::write_float32);
+
+	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
@@ -394,6 +432,8 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
+		// TBD -> possibly need to release memory of an existing tag at this address
+
 		TagGroup &tag_group = tag_groups[p_tag_group_name];
 		if (tag_group.protocol == "opc_ua") {
 			OpcUaTag tag = { false, UA_NODEID_NULL, { 0 } };
@@ -412,33 +452,6 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 	}
 }
 
-void OIPComms::process() {
-	if (enable_comms && sim_running) {
-		uint64_t current_ticks = Time::get_singleton()->get_ticks_usec();
-		double delta = (current_ticks - last_ticks) / 1000.0f;
-		for (auto &x : tag_groups) {
-			const String tag_group_name = x.first;
-			TagGroup &tag_group = x.second;
-
-			tag_group.time += delta;
-				
-			if (tag_group.time >= tag_group.polling_interval) {
-				queue_tag_group(tag_group_name);
-				emit_signal("tag_group_polled", tag_group_name);
-				tag_group.time = 0.0f;
-			}
-		}
-		last_ticks = current_ticks;
-	}
-}
-
-void OIPComms::print(const Variant &message) {
-	if (enable_log) {
-		UtilityFunctions::print("OIPComms: " + String(message));
-	}
-}
-
-// --- GETTERS/SETTERS
 void OIPComms::set_enable_comms(bool value) {
 	enable_comms = value;
 	if (value) {
@@ -480,7 +493,7 @@ bool OIPComms::get_enable_log() {
 	return enable_log;
 }
 
-// --- OIP READ/WRITES
+// OIP READ/WRITES
 // the reads typically occur on the main thread (separate from processing thread)
 // need to be a little more careful with thread safety. don't use pass by reference here, copy values
 // writes get queued, so should be fine
@@ -503,23 +516,6 @@ bool OIPComms::get_enable_log() {
 		return -1;                                                                 \
 	}
 
-#define OIP_WRITE_FUNC(a, b, c)                                                                         \
-	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) { \
-		if (enable_comms && sim_running) {                                                              \
-			if (tag_groups[p_tag_group_name].protocol == "opc_ua") {                                    \
-				if (!tag_groups[p_tag_group_name].opc_ua_tags[p_tag_name].initialized) return;			\
-			}	\
-			WriteRequest write_req = {                                                                  \
-				c,                                                                                      \
-				p_tag_group_name,                                                                       \
-				p_tag_name,                                                                             \
-				p_value                                                                                 \
-			};                                                                                          \
-			write_queue.push(write_req);                                                                \
-			tag_group_queue.push("");                                                                   \
-		}                                                                                               \
-	}
-
 OIP_READ_FUNC(bit, bool, BOOLEAN)
 OIP_READ_FUNC(uint64, uint64_t, UINT64)
 OIP_READ_FUNC(int64, int64_t, INT64)
@@ -532,6 +528,22 @@ OIP_READ_FUNC(int8, int8_t, INT16)
 OIP_READ_FUNC(float64, double, DOUBLE)
 OIP_READ_FUNC(float32, float, FLOAT)
 
+#define OIP_WRITE_FUNC(a, b, c)                                                                                                         \
+	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) {                                 \
+		if (enable_comms && sim_running) {                                                                                              \
+			if (tag_groups[p_tag_group_name].protocol == "opc_ua" && !tag_groups[p_tag_group_name].opc_ua_tags[p_tag_name].initialized) \
+				return;                                                                                                                 \
+			WriteRequest write_req = {                                                                                                  \
+				c,                                                                                                                      \
+				p_tag_group_name,                                                                                                       \
+				p_tag_name,                                                                                                             \
+				p_value                                                                                                                 \
+			};                                                                                                                          \
+			write_queue.push(write_req);                                                                                                \
+			tag_group_queue.push("");                                                                                                   \
+		}                                                                                                                               \
+	}
+
 OIP_WRITE_FUNC(bit, bool, 0)
 OIP_WRITE_FUNC(uint64, uint64_t, 1)
 OIP_WRITE_FUNC(int64, int64_t, 2)
@@ -543,42 +555,3 @@ OIP_WRITE_FUNC(uint8, uint8_t, 7)
 OIP_WRITE_FUNC(int8, int8_t, 8)
 OIP_WRITE_FUNC(float64, double, 9)
 OIP_WRITE_FUNC(float32, float, 10)
-
-void OIPComms::opc_ua_test() {
-	UA_Client *client = UA_Client_new();
-
-	UA_ClientConfig_setDefault(UA_Client_getConfig(client));
-
-	UA_StatusCode retval = UA_Client_connect(client, "opc.tcp://192.168.56.104:62541");
-	if (retval != UA_STATUSCODE_GOOD) {
-		//"The connection failed with status code %s",
-		//UA_StatusCode_name(retval));
-		UA_Client_delete(client);
-		return;
-	}
-
-	UA_Variant value2;
-	UA_Variant_init(&value2);
-
-	const UA_NodeId nodeId2 = UA_NODEID_STRING(1, "[TEST]TEST_SPEED_INOUT");
-	retval = UA_Client_readValueAttribute(client, nodeId2, &value2);
-
-	if (retval == UA_STATUSCODE_GOOD) {
-		float d = *(float *)value2.data;
-		UtilityFunctions::print("test value ", d);
-	}
-
-	Variant foo = 2.5f;
-	float test = (float)foo;
-	retval = UA_Variant_setScalarCopy(&value2, &test, &UA_TYPES[UA_TYPES_FLOAT]);
-	UA_Client_writeValueAttribute(client, nodeId2, &value2);
-
-	retval = UA_Client_readValueAttribute(client, nodeId2, &value2);
-	if (retval == UA_STATUSCODE_GOOD) {
-		float d = *(float *)value2.data;
-		UtilityFunctions::print("test value ", d);
-	}
-
-	UA_Variant_clear(&value2);
-	UA_Client_delete(client);
-}

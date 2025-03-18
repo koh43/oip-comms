@@ -35,6 +35,8 @@ private:
 		bool initialized = false;
 		UA_NodeId node_id;
 		UA_Variant value;
+
+		// no implementation of "dirty" tags here - see if needed on the PLC interface
 	};
 
 	struct TagGroup {
@@ -95,8 +97,12 @@ private:
 
 	void flush_all_writes();
 	void flush_one_write();
+
+	// process both PLC and OPC UA writes
 	void process_write(const WriteRequest &write_req);
-	bool process_read(const PlcTag &tag, const String &tag_name);
+
+	// process individual PLC read
+	bool process_plc_read(const PlcTag &tag, const String &tag_name);
 
 	void opc_write(const String &tag_group_name, const String &tag_path);
 
@@ -123,6 +129,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
+	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
 
 	bool get_enable_comms();
 	void set_enable_comms(bool value);
@@ -133,12 +141,7 @@ public:
 	bool get_enable_log();
 	void set_enable_log(bool value);
 
-	void register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu);
-	bool register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count);
-
 	void process();
-
-	void opc_ua_test();
 
 	OIPComms();
 	~OIPComms();

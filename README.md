@@ -16,3 +16,7 @@ Build command:
 Debugging does not currently work because the OIP builds on the .NET version of the Godot engine. Other platforms have not been built yet.
 
 This project uses the standard library.
+
+# Licensing
+Right now technically there is no license and use is only as a part of the Open Industry Project.
+I haven't gone through licensing requirements yet, but please review licensing requirements of the Godot Engine, the Open Industry Project, libplctag and open62541. It's going to be the common denominator of those licenses.

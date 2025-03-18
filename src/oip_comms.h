@@ -141,10 +141,7 @@ public:
 	bool get_enable_log();
 	void set_enable_log(bool value);
 
-	void process();
-
-	OIPComms();
-	~OIPComms();
+	Array get_tag_groups();
 
 #define OIP_DECLARE_FUNC(a, b)                                          \
 	b read_##a(const String p_tag_group_name, const String p_tag_name); \
@@ -162,6 +159,10 @@ public:
 	OIP_DECLARE_FUNC(float64, double)
 	OIP_DECLARE_FUNC(float32, float)
 
+	void process();
+
+	OIPComms();
+	~OIPComms();
 };
 
 } //namespace godot

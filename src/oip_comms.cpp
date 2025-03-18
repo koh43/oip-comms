@@ -403,6 +403,8 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("write_float64", "tag_group_name", "tag_name", "value"), &OIPComms::write_float64);
 	ClassDB::bind_method(D_METHOD("write_float32", "tag_group_name", "tag_name", "value"), &OIPComms::write_float32);
 
+	ClassDB::bind_method(D_METHOD("get_tag_groups"), &OIPComms::get_tag_groups);
+
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
@@ -502,6 +504,16 @@ void OIPComms::set_enable_log(bool value) {
 
 bool OIPComms::get_enable_log() {
 	return enable_log;
+}
+
+Array OIPComms::get_tag_groups() {
+	Array groups;
+
+	for (const auto &x : tag_groups) {
+		groups.push_back(x.first);
+	}
+
+	return groups;
 }
 
 // OIP READ/WRITES

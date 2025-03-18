@@ -407,6 +407,12 @@ void OIPComms::_bind_methods() {
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
+	if (p_tag_group_name.is_empty()) return;
+
+	String _gateway = p_gateway;
+	if (_gateway.to_lower().contains("localhost"))
+		_gateway = _gateway.replace("localhost", "127.0.0.1");
+
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
 		print("Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
 		cleanup_tag_group(p_tag_group_name);
@@ -417,7 +423,7 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 		p_polling_interval * 1.0f, // initialize time to polling time and it should kick an initial read
 		p_protocol,
 
-		p_gateway,
+		_gateway,
 
 		p_path,
 		p_cpu,
@@ -431,6 +437,9 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 }
 
 bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
+	if (p_tag_group_name.is_empty() || p_tag_name.is_empty())
+		return false;
+
 	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
 		// TBD -> possibly need to release memory of an existing tag at this address
 
@@ -445,6 +454,8 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 			};
 			tag_groups[p_tag_group_name].plc_tags[p_tag_name] = tag;
 		}
+
+		print("Registered tag " + p_tag_name + " under tag group " + p_tag_group_name);
 		return true;
 	} else {
 		print("Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");

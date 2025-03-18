@@ -171,14 +171,35 @@ OIP_OPC_SET(float32, float, FLOAT, FLOAT)
 if (tag_group.protocol == "opc_ua") { \
 	opc_tag_set_##a(write_req.tag_group_name, write_req.tag_name, write_req.value); \
 } else { \
-	if (tag_pointer != -1) plc_tag_set_##a(tag_pointer, 0, write_req.value); \
+	if (tag_pointer >= 0) plc_tag_set_##a(tag_pointer, 0, write_req.value); \
 }
 
 void OIPComms::process_write(const WriteRequest &write_req) {
 	TagGroup &tag_group = tag_groups[write_req.tag_group_name];
 
 	int32_t tag_pointer = -1;
-	if (tag_group.protocol != "opc_ua") tag_pointer = tag_group.plc_tags[write_req.tag_name].tag_pointer;
+	if (tag_group.protocol == "opc_ua") {
+		OpcUaTag &tag = tag_group.opc_ua_tags[write_req.tag_name];
+
+		// attempt to open the OPC UA client if not open
+		if (tag_group.client == nullptr) {
+			init_opc_ua_client(write_req.tag_group_name);
+		}
+
+		// attempt to initialize
+		if (!tag.initialized) {
+			init_opc_ua_tag(write_req.tag_group_name, write_req.tag_name);
+		}
+	} else {
+		PlcTag &tag = tag_group.plc_tags[write_req.tag_name];
+
+		// attempt to initialize
+		if (tag.tag_pointer < 0) {
+			init_plc_tag(write_req.tag_group_name, write_req.tag_name);
+		}
+
+		tag_pointer = tag.tag_pointer;
+	}
 
 	switch (write_req.instruction) {
 		case 0:
@@ -215,6 +236,9 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 			OIP_OPC_SET_CALL(float32)
 			break;
 	}
+
+	// this code only need for PLC interface - the above code is "setting" the data in memory
+	// this code actually writes to the PLC tags
 	if (tag_group.protocol != "opc_ua") {
 		if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 			tag_groups[write_req.tag_group_name].plc_tags[write_req.tag_name].dirty = true;
@@ -235,33 +259,18 @@ void OIPComms::process_tag_group(const String &tag_group_name) {
 
 void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
-	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
 	for (auto &x : tag_group.plc_tags) {
 		const String tag_name = x.first;
 		PlcTag &tag = x.second;
 
 		// tag is not initialized
 		if (tag.tag_pointer < 0) {
-			String tag_path = group_tag_path + itos(tag.elem_count) + "&name=" + tag_name;
-
-			tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
-
-			// failed to create tag
-			if (tag.tag_pointer < 0) {
-				print("Failed to create tag: " + tag_name);
-				print("Skipping remainder of tag group: " + tag_group_name);
+			if (!init_plc_tag(tag_group_name, tag_name))
 				break;
-			} else {
-				if (!process_plc_read(tag, tag_name)) {
-					print("Skipping remainder of tag group: " + tag_group_name);
-					break;
-				} else {
-					// if read was successful, the tag read is now clean
-					tag.dirty = false;
-				}
-			}
-		} else {
-			// tag is already initialized, now read it
+		}
+
+		// tag is initialized, read it
+		if (tag.tag_pointer >= 0) {
 			if (!process_plc_read(tag, tag_name)) {
 				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
@@ -273,30 +282,33 @@ void OIPComms::process_plc_tag_group(const String &tag_group_name) {
 	}
 }
 
+bool OIPComms::init_plc_tag(const String &tag_group_name, const String &tag_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	PlcTag &tag = tag_group.plc_tags[tag_name];
+
+	String group_tag_path = "protocol=" + tag_group.protocol + "&gateway=" + tag_group.gateway + "&path=" + tag_group.path + "&cpu=" + tag_group.cpu + "&elem_count=";
+
+	String tag_path = group_tag_path + itos(tag.elem_count) + "&name=" + tag_name;
+	tag.tag_pointer = plc_tag_create(tag_path.utf8().get_data(), timeout);
+
+	// failed to create tag
+	if (tag.tag_pointer < 0) {
+		print("Failed to create tag: " + tag_name);
+		print("Skipping remainder of tag group: " + tag_group_name);
+		return false;
+	}
+
+	tag_group.init_count++;
+	return true;
+}
+
 void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
-
-	UA_StatusCode ret_val = UA_STATUSCODE_BAD;
 
 	// this will only attempt to generate a new client ONCE
 	// even if the operation fails, tag_group.client will not be a nullptr on the next pass
 	if (tag_group.client == nullptr) {
-		tag_group.client = UA_Client_new();
-
-		UA_ClientConfig *config = UA_Client_getConfig(tag_group.client);
-		UA_ClientConfig_setDefault(config);
-		//config->logging = nullptr;
-
-		const char *endpoint_URL = tag_group.gateway.utf8().get_data();
-		ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
-		if (ret_val != UA_STATUSCODE_GOOD) {
-			print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
-
-			// TBD -> don't delete this here, causes a crash - not sure why entirely
-			// this might lead to a tiny memory leak, for the client that fails to connect
-			// will be cleaned up the next time the sim is ran
-			//UA_Client_delete(tag_group.client);
-		}
+		init_opc_ua_client(tag_group_name);
 	}
 
 	// not sure if this check is needed
@@ -314,19 +326,61 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 		OpcUaTag &tag = x.second;
 
 		if (!tag.initialized) {
-			UA_Variant_init(&tag.value);
-
-			tag.node_id = UA_NODEID_STRING_ALLOC((UA_UInt16)tag_group.path.to_int(), tag_path.utf8().get_data());
-			tag.initialized = true;
+			init_opc_ua_tag(tag_group_name, tag_path);
 		}
 
 		if (tag.initialized) {
-			ret_val = UA_Client_readValueAttribute(tag_group.client, tag.node_id, &(tag.value));
+			UA_StatusCode ret_val = UA_Client_readValueAttribute(tag_group.client, tag.node_id, &(tag.value));
 			if (ret_val != UA_STATUSCODE_GOOD) {
-				UtilityFunctions::print("OIP Comms: OPC UA failed to read " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)));
+				print("OPC UA failed to read " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)));
+				print("Skipping remainder of tag group: " + tag_group_name);
+				break;
 			}
 		}
 	}
+}
+
+bool OIPComms::init_opc_ua_client(const String& tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+
+	UA_StatusCode ret_val = UA_STATUSCODE_BAD;
+
+	tag_group.client = UA_Client_new();
+
+	UA_ClientConfig *config = UA_Client_getConfig(tag_group.client);
+	UA_ClientConfig_setDefault(config);
+	//config->logging = nullptr;
+
+	const char *endpoint_URL = tag_group.gateway.utf8().get_data();
+	ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
+	if (ret_val != UA_STATUSCODE_GOOD) {
+		print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
+
+		// TBD -> don't delete this here, causes a crash - not sure why entirely
+		// this might lead to a tiny memory leak, for the client that fails to connect
+		// will be cleaned up the next time the sim is ran
+		//UA_Client_delete(tag_group.client);
+
+		return false;
+	}
+
+	tag_group.init_count++;
+
+	return true;
+}
+
+bool OIPComms::init_opc_ua_tag(const String &tag_group_name, const String &tag_path) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	OpcUaTag &tag = tag_group.opc_ua_tags[tag_path];
+
+	UA_Variant_init(&tag.value);
+
+	tag.node_id = UA_NODEID_STRING_ALLOC((UA_UInt16)tag_group.path.to_int(), tag_path.utf8().get_data());
+	tag.initialized = true;
+
+	tag_group.init_count++;
+
+	return true;
 }
 
 bool OIPComms::process_plc_read(const PlcTag &tag, const String &tag_name) {
@@ -352,6 +406,20 @@ void OIPComms::process() {
 				queue_tag_group(tag_group_name);
 				emit_signal("tag_group_polled", tag_group_name);
 				tag_group.time = 0.0f;
+			}
+
+			if (!tag_group.init_count_emitted) {
+				size_t total_tag_count = 0;
+				if (tag_group.protocol == "opc_ua")
+					// add 1 for client connection
+					total_tag_count = tag_group.opc_ua_tags.size() + 1;
+				else
+					total_tag_count = tag_group.plc_tags.size();
+
+				if (tag_group.init_count >= total_tag_count) {
+					emit_signal("tag_group_initialized", tag_group_name);
+					tag_group.init_count_emitted = true;
+				}
 			}
 		}
 		last_ticks = current_ticks;
@@ -406,6 +474,7 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_tag_groups"), &OIPComms::get_tag_groups);
 
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
+	ADD_SIGNAL(MethodInfo("tag_group_initialized", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
@@ -422,7 +491,10 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 
 	TagGroup tag_group = {
 		p_polling_interval,
-		p_polling_interval * 1.0f, // initialize time to polling time and it should kick an initial read
+		p_polling_interval * 1.0f,
+		0,
+		false,
+
 		p_protocol,
 
 		_gateway,
@@ -484,6 +556,13 @@ void OIPComms::set_sim_running(bool value) {
 		print("Sim running");
 	} else {
 		print("Sim stopped");
+	}
+
+	// at start or stop we want to clear these values
+	for (auto &x : tag_groups) {
+		TagGroup &tag_group = x.second;
+		tag_group.init_count = 0;
+		tag_group.init_count_emitted = false;
 	}
 }
 

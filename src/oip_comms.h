@@ -32,7 +32,7 @@ private:
 	};
 
 	struct OpcUaTag {
-		bool initialized = false;
+		bool initialized = false; // need to store "initialized" for OPC UA tags because there is no underlying state that tracks it
 		UA_NodeId node_id;
 		UA_Variant value;
 
@@ -42,6 +42,9 @@ private:
 	struct TagGroup {
 		int polling_interval;
 		double time;
+		size_t init_count;
+		bool init_count_emitted;
+
 		String protocol;
 
 		// gateway is a multi-purpose field. either the IP address of a PLC, "192.168.1.200"
@@ -92,6 +95,11 @@ private:
 	void process_tag_group(const String &tag_group_name);
 	void process_plc_tag_group(const String &tag_group_name);
 	void process_opc_ua_tag_group(const String &tag_group_name);
+
+	bool init_plc_tag(const String &tag_group_name, const String &tag_name);
+
+	bool init_opc_ua_client(const String &tag_group_name);
+	bool init_opc_ua_tag(const String &tag_group_name, const String &tag_path);
 
 	void queue_tag_group(const String &tag_group_name);
 

@@ -3,7 +3,7 @@ This component is for the Open Industry Project (OIP). It enables communications
 - https://github.com/libplctag/libplctag
 - https://github.com/open62541/open62541
 
-See PR https://github.com/open62541/open62541
+See PR [https://github.com/open62541/open62541](https://github.com/Open-Industry-Project/Open-Industry-Project/pull/161)
 
 # Building from Source
 Please read Godot's documentation on building from source and GDextension:

@@ -20,6 +20,8 @@ class OIPComms : public Node {
 
 private:
 	int timeout = 5000;
+	double startup_timer = 0.0f;
+	double register_wait_time = 500.0f;
 
 	struct PlcTag {
 		int32_t tag_pointer = -1;
@@ -100,6 +102,10 @@ private:
 
 	bool init_opc_ua_client(const String &tag_group_name);
 	bool init_opc_ua_tag(const String &tag_group_name, const String &tag_path);
+
+	bool opc_ua_client_connected(const String &tag_group_name);
+	bool tag_group_exists(const String &tag_group_name);
+	bool tag_exists(const String &tag_group_name, const String &tag_name);
 
 	void queue_tag_group(const String &tag_group_name);
 

@@ -1,2 +1,2 @@
-scons platform=windows target=template_debug debug_symbols=yes
+scons platform=windows
 C:\Godot\Godot_v4.3-stable_win64_console.exe -e --path "C:\Dev\cpp\OIP\gdext\OIP_gdext\demo"

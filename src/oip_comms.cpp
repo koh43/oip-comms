@@ -42,6 +42,9 @@ void OIPComms::cleanup_tag_groups() {
 
 void OIPComms::cleanup_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
+
+	print("Cleaning up tags");
+
 	if (tag_group.protocol == "opc_ua") {
 		for (auto &x : tag_group.opc_ua_tags) {
 			OpcUaTag &tag = x.second;
@@ -50,14 +53,19 @@ void OIPComms::cleanup_tag_group(const String &tag_group_name) {
 
 		if (tag_group.client != nullptr) {
 			UA_Client_delete(tag_group.client);
+			tag_group.client = nullptr;
 		}
+		tag_group.opc_ua_tags.clear();
 
 	} else {
 		for (auto &x : tag_group.plc_tags) {
 			PlcTag &tag = x.second;
 			plc_tag_destroy(tag.tag_pointer);
 		}
+		tag_group.plc_tags.clear();
 	}
+	tag_group.init_count = 0;
+	tag_group.init_count_emitted = false;
 }
 
 void OIPComms::watchdog() {
@@ -80,18 +88,28 @@ void OIPComms::process_work() {
 		// this pop operation is blocking - thread will sleep until a request comes along
 		String tag_group_name = tag_group_queue.pop();
 
-		flush_all_writes();
-
 		if (tag_group_name.is_empty() && !work_thread_running)
 			break;
 
-		if (tag_groups.find(tag_group_name) != tag_groups.end()) {
-			process_tag_group(tag_group_name);
-		} else {
-			if (tag_group_name.is_empty()) {
-				print("Processing writes (no tag groups to be updated)");
+		bool custom_instruction = false;
+		if (tag_group_name == "_CLEANUP_TAG_GROUPS") {
+			cleanup_tag_groups();
+			custom_instruction = true;
+		}
+
+		// at end of simulation, tag_group and write queues should be allow to flush out, but not actually do anything
+		flush_all_writes();
+
+		// only actually process if sim running
+		if (sim_running) {
+			if (tag_groups.find(tag_group_name) != tag_groups.end()) {
+				process_tag_group(tag_group_name);
 			} else {
-				print("Tag group not found: " + tag_group_name);
+				if (tag_group_name.is_empty()) {
+					print("Processing writes (no tag groups to be updated)");
+				} else {
+					if (!custom_instruction) print("Tag group not found: " + tag_group_name);
+				}
 			}
 		}
 	}
@@ -105,7 +123,8 @@ void OIPComms::flush_all_writes() {
 	while (!write_queue.empty()) {
 		WriteRequest write_req = write_queue.front();
 		write_queue.pop();
-		process_write(write_req);
+		if (sim_running)
+			process_write(write_req);
 	}
 }
 
@@ -114,17 +133,16 @@ void OIPComms::flush_one_write() {
 	if (!write_queue.empty()) {
 		WriteRequest write_req = write_queue.front();
 		write_queue.pop();
-		process_write(write_req);
+		if (sim_running)
+			process_write(write_req);
 	}
 }
 
 void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
-	TagGroup &tag_group = tag_groups[tag_group_name];
-
-	UA_StatusCode client_status;
-	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
-	if (client_status != UA_STATUSCODE_GOOD)
+	if (!opc_ua_client_connected(tag_group_name))
 		return;
+
+	TagGroup &tag_group = tag_groups[tag_group_name];
 
 	OpcUaTag &tag = tag_group.opc_ua_tags[tag_path];
 	if (!tag.initialized)
@@ -139,6 +157,7 @@ void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
 #define OIP_OPC_SET(a, b, c, d) \
 void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant value) { \
 	if (value.get_type() == Variant::##d) { \
+		if (!opc_ua_client_connected(tag_group_name)) return; \
 		OpcUaTag &tag = tag_groups[tag_group_name].opc_ua_tags[tag_path]; \
 		if (!tag.initialized) return; \
 		b raw_value = (b)value; \
@@ -178,26 +197,8 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 	TagGroup &tag_group = tag_groups[write_req.tag_group_name];
 
 	int32_t tag_pointer = -1;
-	if (tag_group.protocol == "opc_ua") {
-		OpcUaTag &tag = tag_group.opc_ua_tags[write_req.tag_name];
-
-		// attempt to open the OPC UA client if not open
-		if (tag_group.client == nullptr) {
-			init_opc_ua_client(write_req.tag_group_name);
-		}
-
-		// attempt to initialize
-		if (!tag.initialized) {
-			init_opc_ua_tag(write_req.tag_group_name, write_req.tag_name);
-		}
-	} else {
+	if (tag_group.protocol != "opc_ua") {
 		PlcTag &tag = tag_group.plc_tags[write_req.tag_name];
-
-		// attempt to initialize
-		if (tag.tag_pointer < 0) {
-			init_plc_tag(write_req.tag_group_name, write_req.tag_name);
-		}
-
 		tag_pointer = tag.tag_pointer;
 	}
 
@@ -240,7 +241,7 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 	// this code only need for PLC interface - the above code is "setting" the data in memory
 	// this code actually writes to the PLC tags
 	if (tag_group.protocol != "opc_ua") {
-		if (plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
+		if (tag_pointer >= 0 && plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 			tag_groups[write_req.tag_group_name].plc_tags[write_req.tag_name].dirty = true;
 		} else {
 			print("Failed to write tag: " + write_req.tag_name);
@@ -305,21 +306,13 @@ bool OIPComms::init_plc_tag(const String &tag_group_name, const String &tag_name
 void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 	TagGroup &tag_group = tag_groups[tag_group_name];
 
-	// this will only attempt to generate a new client ONCE
-	// even if the operation fails, tag_group.client will not be a nullptr on the next pass
-	if (tag_group.client == nullptr) {
-		init_opc_ua_client(tag_group_name);
+	// ensure client is connected
+	if (!opc_ua_client_connected(tag_group_name)) {
+		// if not connected, try to make a new connection
+		if (!init_opc_ua_client(tag_group_name))
+			// if that fails, give up
+			return;
 	}
-
-	// not sure if this check is needed
-	if (tag_group.client == nullptr)
-		return;
-
-	// ensure that the client is actually connected before proceeding
-	UA_StatusCode client_status;
-	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
-	if (client_status != UA_STATUSCODE_GOOD)
-		return;
 
 	for (auto &x : tag_group.opc_ua_tags) {
 		const String tag_path = x.first;
@@ -364,8 +357,6 @@ bool OIPComms::init_opc_ua_client(const String& tag_group_name) {
 		return false;
 	}
 
-	tag_group.init_count++;
-
 	return true;
 }
 
@@ -381,6 +372,34 @@ bool OIPComms::init_opc_ua_tag(const String &tag_group_name, const String &tag_p
 	tag_group.init_count++;
 
 	return true;
+}
+
+bool OIPComms::opc_ua_client_connected(const String &tag_group_name) {
+	TagGroup &tag_group = tag_groups[tag_group_name];
+	if (tag_group.client == nullptr)
+		return false;
+
+	UA_StatusCode client_status;
+	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
+	if (client_status != UA_STATUSCODE_GOOD)
+		false;
+	return true;
+}
+
+bool OIPComms::tag_group_exists(const String& tag_group_name) {
+	return tag_groups.find(tag_group_name) != tag_groups.end();
+}
+
+bool OIPComms::tag_exists(const String& tag_group_name, const String& tag_name) {
+	if (tag_group_exists(tag_group_name)) {
+		TagGroup &tag_group = tag_groups[tag_group_name];
+		if (tag_group.protocol == "opc_ua") {
+			return tag_group.opc_ua_tags.find(tag_name) != tag_group.opc_ua_tags.end();
+		} else {
+			return tag_group.plc_tags.find(tag_name) != tag_group.plc_tags.end();
+		}
+	}
+	return false;
 }
 
 bool OIPComms::process_plc_read(const PlcTag &tag, const String &tag_name) {
@@ -408,21 +427,27 @@ void OIPComms::process() {
 				tag_group.time = 0.0f;
 			}
 
-			if (!tag_group.init_count_emitted) {
+			// check for tag initialization after 500 ms
+			if (startup_timer >= register_wait_time && !tag_group.init_count_emitted) {
 				size_t total_tag_count = 0;
 				if (tag_group.protocol == "opc_ua")
-					// add 1 for client connection
-					total_tag_count = tag_group.opc_ua_tags.size() + 1;
+					total_tag_count = tag_group.opc_ua_tags.size();
 				else
 					total_tag_count = tag_group.plc_tags.size();
 
 				if (tag_group.init_count >= total_tag_count) {
 					emit_signal("tag_group_initialized", tag_group_name);
+					print("Tag group initialized: " + tag_group_name);
 					tag_group.init_count_emitted = true;
 				}
 			}
 		}
+		if (startup_timer <= register_wait_time + 500.0f)
+			startup_timer += delta;
+
 		last_ticks = current_ticks;
+	} else {
+		startup_timer = 0.0f;
 	}
 }
 
@@ -484,9 +509,11 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 	if (_gateway.to_lower().contains("localhost"))
 		_gateway = _gateway.replace("localhost", "127.0.0.1");
 
-	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
+	if (tag_group_exists(p_tag_group_name)) {
 		print("Tag group [" + p_tag_group_name + "] already exists. Overwriting with new values.");
-		cleanup_tag_group(p_tag_group_name);
+
+		// probably don't need to do this here
+		//queue_tag_group("_CLEANUP_TAG_GROUPS");
 	}
 
 	TagGroup tag_group = {
@@ -514,22 +541,23 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 	if (p_tag_group_name.is_empty() || p_tag_name.is_empty())
 		return false;
 
-	if (tag_groups.find(p_tag_group_name) != tag_groups.end()) {
-		// TBD -> possibly need to release memory of an existing tag at this address
+	if (tag_group_exists(p_tag_group_name)) {
 
-		TagGroup &tag_group = tag_groups[p_tag_group_name];
-		if (tag_group.protocol == "opc_ua") {
-			OpcUaTag tag = { false, UA_NODEID_NULL, { 0 } };
-			tag_groups[p_tag_group_name].opc_ua_tags[p_tag_name] = tag;
-		} else {
-			PlcTag tag = {
-				-1,
-				p_elem_count
-			};
-			tag_groups[p_tag_group_name].plc_tags[p_tag_name] = tag;
+		if (!tag_exists(p_tag_group_name, p_tag_name)) {
+			TagGroup &tag_group = tag_groups[p_tag_group_name];
+			if (tag_group.protocol == "opc_ua") {
+				OpcUaTag tag = { false, UA_NODEID_NULL, { 0 } };
+				tag_group.opc_ua_tags[p_tag_name] = tag;
+			} else {
+				PlcTag tag = {
+					-1,
+					p_elem_count
+				};
+				tag_group.plc_tags[p_tag_name] = tag;
+			}
+			print("Registered tag " + p_tag_name + " under tag group " + p_tag_group_name);
 		}
 
-		print("Registered tag " + p_tag_name + " under tag group " + p_tag_group_name);
 		return true;
 	} else {
 		print("Tag group [" + p_tag_group_name + "] does not exist. Check the 'Comms' panel below.");
@@ -556,13 +584,9 @@ void OIPComms::set_sim_running(bool value) {
 		print("Sim running");
 	} else {
 		print("Sim stopped");
-	}
 
-	// at start or stop we want to clear these values
-	for (auto &x : tag_groups) {
-		TagGroup &tag_group = x.second;
-		tag_group.init_count = 0;
-		tag_group.init_count_emitted = false;
+		// when stopping sim, clean up tag groups
+		queue_tag_group("_CLEANUP_TAG_GROUPS");
 	}
 }
 
@@ -602,7 +626,7 @@ Array OIPComms::get_tag_groups() {
 
 #define OIP_READ_FUNC(a, b, c)                                                        \
 	b OIPComms::read_##a(const String p_tag_group_name, const String p_tag_name) { \
-		if (enable_comms && sim_running) {                                         \
+		if (enable_comms && sim_running && tag_exists(p_tag_group_name, p_tag_name)) {                                         \
 			TagGroup &tag_group = tag_groups[p_tag_group_name];                    \
 			if (tag_group.protocol == "opc_ua") {                                  \
 				OpcUaTag tag = tag_group.opc_ua_tags[p_tag_name];                  \
@@ -632,9 +656,7 @@ OIP_READ_FUNC(float32, float, FLOAT)
 
 #define OIP_WRITE_FUNC(a, b, c)                                                                                                         \
 	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) {                                 \
-		if (enable_comms && sim_running) {                                                                                              \
-			if (tag_groups[p_tag_group_name].protocol == "opc_ua" && !tag_groups[p_tag_group_name].opc_ua_tags[p_tag_name].initialized) \
-				return;                                                                                                                 \
+		if (enable_comms && sim_running && tag_exists(p_tag_group_name, p_tag_name)) { \
 			WriteRequest write_req = {                                                                                                  \
 				c,                                                                                                                      \
 				p_tag_group_name,                                                                                                       \

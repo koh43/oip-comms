@@ -10,9 +10,7 @@
 using namespace godot;
 
 OIPComms::OIPComms() {
-	// maybe using RefCounted here instead will make warnings go away?
-
-	print("Read thread start");
+	print("Process work start");
 	work_thread.instantiate();
 	work_thread->start(callable_mp(this, &OIPComms::process_work));
 
@@ -108,7 +106,7 @@ void OIPComms::process_work() {
 				if (tag_group_name.is_empty()) {
 					print("Processing writes (no tag groups to be updated)");
 				} else {
-					if (!custom_instruction) print("Tag group not found: " + tag_group_name);
+					if (!custom_instruction) print("Tag group not found: " + tag_group_name, true);
 				}
 			}
 		}
@@ -150,7 +148,7 @@ void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
 
 	UA_StatusCode ret_val = UA_Client_writeValueAttribute(tag_group.client, tag.node_id, &(tag.value));
 	if (ret_val != UA_STATUSCODE_GOOD) {
-		print("OIP Comms: Failed to write tag value for " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)));
+		print("OIP Comms: Failed to write tag value for " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)), true);
 	}
 }
 
@@ -163,10 +161,10 @@ void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_p
 		b raw_value = (b)value; \
 		UA_StatusCode ret_val = UA_Variant_setScalarCopy(&(tag.value), &raw_value, &UA_TYPES[UA_TYPES_##c]); \
 		if (ret_val != UA_STATUSCODE_GOOD) \
-			print("OIP Comms: Failed to cast data on write for " + tag_path); \
+			print("OIP Comms: Failed to cast data on write for " + tag_path, true); \
 		opc_write(tag_group_name, tag_path); \
 	} else { \
-		print("OIP Comms: Supplied data type incorrect for " + tag_path); \
+		print("OIP Comms: Supplied data type incorrect for " + tag_path, true); \
 	} \
 }
 
@@ -244,7 +242,7 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 		if (tag_pointer >= 0 && plc_tag_write(tag_pointer, timeout) == PLCTAG_STATUS_OK) {
 			tag_groups[write_req.tag_group_name].plc_tags[write_req.tag_name].dirty = true;
 		} else {
-			print("Failed to write tag: " + write_req.tag_name);
+			print("Failed to write tag: " + write_req.tag_name, true);
 		}
 	}
 }
@@ -294,7 +292,7 @@ bool OIPComms::init_plc_tag(const String &tag_group_name, const String &tag_name
 
 	// failed to create tag
 	if (tag.tag_pointer < 0) {
-		print("Failed to create tag: " + tag_name);
+		print("Failed to create tag: " + tag_name, true);
 		print("Skipping remainder of tag group: " + tag_group_name);
 		return false;
 	}
@@ -325,7 +323,7 @@ void OIPComms::process_opc_ua_tag_group(const String &tag_group_name) {
 		if (tag.initialized) {
 			UA_StatusCode ret_val = UA_Client_readValueAttribute(tag_group.client, tag.node_id, &(tag.value));
 			if (ret_val != UA_STATUSCODE_GOOD) {
-				print("OPC UA failed to read " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)));
+				print("OPC UA failed to read " + tag_path + " with status code " + String(UA_StatusCode_name(ret_val)), true);
 				print("Skipping remainder of tag group: " + tag_group_name);
 				break;
 			}
@@ -347,13 +345,7 @@ bool OIPComms::init_opc_ua_client(const String& tag_group_name) {
 	const char *endpoint_URL = tag_group.gateway.utf8().get_data();
 	ret_val = UA_Client_connect(tag_group.client, endpoint_URL);
 	if (ret_val != UA_STATUSCODE_GOOD) {
-		print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)));
-
-		// TBD -> don't delete this here, causes a crash - not sure why entirely
-		// this might lead to a tiny memory leak, for the client that fails to connect
-		// will be cleaned up the next time the sim is ran
-		//UA_Client_delete(tag_group.client);
-
+		print("OIP Comms: The OPC UA connection failed with status code " + String(UA_StatusCode_name(ret_val)), true);
 		return false;
 	}
 
@@ -405,7 +397,7 @@ bool OIPComms::tag_exists(const String& tag_group_name, const String& tag_name) 
 bool OIPComms::process_plc_read(const PlcTag &tag, const String &tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
-		print("Failed to read tag: " + tag_name);
+		print("Failed to read tag: " + tag_name, true);
 		return false;
 	}
 	return true;
@@ -428,6 +420,7 @@ void OIPComms::process() {
 			}
 
 			// check for tag initialization after 500 ms
+			// TBD -> there might be a better solution - not sure yet
 			if (startup_timer >= register_wait_time && !tag_group.init_count_emitted) {
 				size_t total_tag_count = 0;
 				if (tag_group.protocol == "opc_ua")
@@ -451,9 +444,20 @@ void OIPComms::process() {
 	}
 }
 
-void OIPComms::print(const Variant &message) {
-	if (enable_log) {
-		UtilityFunctions::print("OIPComms: " + String(message));
+void OIPComms::print(const Variant &message, bool error) {
+	if (error) {
+		// always print errors
+		UtilityFunctions::printerr("OIPComms: " + String(message));
+		if (!comms_error) {
+			emit_signal("comms_error");
+			last_error = message;
+			comms_error = true;
+		}
+	} else {
+		if (enable_log) {
+			// only print non-errors if enable_log is on
+			UtilityFunctions::print("OIPComms: " + String(message));
+		}
 	}
 }
 
@@ -471,6 +475,8 @@ void OIPComms::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_enable_log", "value"), &OIPComms::set_enable_log);
 	ClassDB::bind_method(D_METHOD("get_enable_log"), &OIPComms::get_enable_log);
+
+	ClassDB::bind_method(D_METHOD("get_comms_error"), &OIPComms::get_comms_error);
 
 	ClassDB::bind_method(D_METHOD("read_bit", "tag_group_name", "tag_name"), &OIPComms::read_bit);
 	ClassDB::bind_method(D_METHOD("read_uint64", "tag_group_name", "tag_name"), &OIPComms::read_uint64);
@@ -502,6 +508,7 @@ void OIPComms::_bind_methods() {
 
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 	ADD_SIGNAL(MethodInfo("tag_group_initialized", PropertyInfo(Variant::STRING, "tag_group_name")));
+	ADD_SIGNAL(MethodInfo("comms_error"));
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
@@ -584,6 +591,7 @@ bool OIPComms::get_enable_comms() {
 void OIPComms::set_sim_running(bool value) {
 	sim_running = value;
 	if (value) {
+		comms_error = false;
 		print("Sim running");
 	} else {
 		print("Sim stopped");
@@ -610,6 +618,10 @@ void OIPComms::set_enable_log(bool value) {
 
 bool OIPComms::get_enable_log() {
 	return enable_log;
+}
+
+String OIPComms::get_comms_error() {
+	return last_error;
 }
 
 Array OIPComms::get_tag_groups() {

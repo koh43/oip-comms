@@ -22,6 +22,8 @@ private:
 	int timeout = 5000;
 	double startup_timer = 0.0f;
 	double register_wait_time = 500.0f;
+	bool comms_error = false;
+	String last_error = "";
 
 	struct PlcTag {
 		int32_t tag_pointer = -1;
@@ -137,7 +139,7 @@ private:
 	void cleanup_tag_groups();
 	void cleanup_tag_group(const String &tag_group_name);
 
-	void print(const Variant &message);
+	void print(const Variant &message, bool error = false);
 
 protected:
 	static void _bind_methods();
@@ -154,6 +156,8 @@ public:
 
 	bool get_enable_log();
 	void set_enable_log(bool value);
+
+	String get_comms_error();
 
 	Array get_tag_groups();
 

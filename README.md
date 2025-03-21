@@ -13,7 +13,9 @@ Please read Godot's documentation on building from source and GDextension:
 Build command:
 `scons platform=windows`
 
-Debugging does not currently work because the OIP builds on the .NET version of the Godot engine. Other platforms have not been built yet.
+This GDextension as well as the libs (libplctag, open62541) are built with the `/MT` flag. According to dumpbin this removes any external deps on MSVC runtime and should improve portability.
+
+Debugging should work now* with the Godot 4.5 branch of OIP.
 
 This project uses the standard library.
 

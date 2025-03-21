@@ -15,6 +15,8 @@ Build command:
 
 This GDextension as well as the libs (libplctag, open62541) are built with the `/MT` flag. According to dumpbin this removes any external deps on MSVC runtime and should improve portability.
 
+https://stackoverflow.com/a/56061183/7132687
+
 This project uses the standard library.
 
 # Debugging

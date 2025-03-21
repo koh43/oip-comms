@@ -11,13 +11,33 @@ Please read Godot's documentation on building from source and GDextension:
 - https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/gdextension_cpp_example.html
 
 Build command:
-`scons platform=windows`
+`scons platform=windows debug_symbols=yes`
 
 This GDextension as well as the libs (libplctag, open62541) are built with the `/MT` flag. According to dumpbin this removes any external deps on MSVC runtime and should improve portability.
 
-Debugging should work now* with the Godot 4.5 branch of OIP.
-
 This project uses the standard library.
+
+# Debugging
+As long as you build with `debug_symbols=yes`, the 4.5 branch of OIP will be able to debug this GDextension application. 
+
+Inside the `.vs/` folder you can create `launch.vs.json`:
+
+```
+{
+	"version": "0.2.1",
+	"defaults": {},
+	"configurations": [
+		{
+			"type": "default",
+			"project": "location_of_oip_4.5_build\\godot.windows.editor.x86_64.exe",
+			"name": "Godot Editor",
+			"args": [ "location_of_project\\Open-Industry-Project\\project.godot" ]
+		}
+	]
+}
+```
+
+Then you can launch the OIP editor from Visual Studio and drop in breakpoints to test.
 
 # Licensing
 Right now technically there is no license and use is only as a part of the Open Industry Project.

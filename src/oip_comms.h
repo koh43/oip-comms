@@ -173,6 +173,8 @@ public:
 	OIP_DECLARE_FUNC(float64, double)
 	OIP_DECLARE_FUNC(float32, float)
 
+	void clear_tag_groups();
+
 	void process();
 
 	OIPComms();

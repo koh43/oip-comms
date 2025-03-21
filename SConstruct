@@ -38,6 +38,10 @@ env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 env.Append(CPPPATH=["src/"])
 env.Append(LIBPATH=["lib/"])
 env.Append(LIBS=["plctag", "open62541"])
+if env["platform"] == "windows":
+    env.Append(CXXFLAGS=["/MT"])
+else:
+    env.Append(LINKFLAGS=["-static"])
 sources = Glob("src/*.cpp")
 
 if env["target"] in ["editor", "template_debug"]:

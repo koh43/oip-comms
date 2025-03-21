@@ -498,6 +498,8 @@ void OIPComms::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_tag_groups"), &OIPComms::get_tag_groups);
 
+	ClassDB::bind_method(D_METHOD("clear_tag_groups"), &OIPComms::clear_tag_groups);
+
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 	ADD_SIGNAL(MethodInfo("tag_group_initialized", PropertyInfo(Variant::STRING, "tag_group_name")));
 }
@@ -535,6 +537,7 @@ void OIPComms::register_tag_group(const String p_tag_group_name, const int p_pol
 	};
 
 	tag_groups[p_tag_group_name] = tag_group;
+	print("Tag group registered: " + p_tag_group_name);
 }
 
 bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_name, const int p_elem_count) {
@@ -617,6 +620,15 @@ Array OIPComms::get_tag_groups() {
 	}
 
 	return groups;
+}
+
+void OIPComms::clear_tag_groups() {
+	if (sim_running)
+		print("Can't clear tag group when simulation is running");
+	else {
+		print("Clearing tag groups");
+		tag_groups.clear();
+	}
 }
 
 // OIP READ/WRITES

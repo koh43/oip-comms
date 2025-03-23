@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="OIPComms" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	The OIPComms singleton is a communications API for PLCs and OPC UA servers. It uses [code]libtagplc[/code] and [code]open62541[/code] as the underlying libraries.
+	The repository and build instructions for this GDextension DLL can be found [url=https://github.com/bikemurt/OIP_gdext]here[/url].
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_tag_groups">
+			<return type="void" />
+			<description>
+			Clears all tag group data. Can only be done when the simulation is not running.
+			</description>
+		</method>
+		<method name="get_comms_error">
+			<return type="String" />
+			<description>
+			The last error which was printed.
+			</description>
+		</method>
+		<method name="get_enable_comms">
+			<return type="bool" />
+			<description>
+			Communications enabled.
+			</description>
+		</method>
+		<method name="get_enable_log">
+			<return type="bool" />
+			<description>
+			Logging enabled.
+			</description>
+		</method>
+		<method name="get_sim_running">
+			<return type="bool" />
+			<description>
+			Simulation is running.
+			</description>
+		</method>
+		<method name="get_tag_groups">
+			<return type="Array" />
+			<description>
+			Returns an array of strings of the registered tag group names.
+			</description>
+		</method>
+		<method name="read_bit">
+			<return type="bool" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a single bit (boolean) from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_float32">
+			<return type="float" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 32-bit floating point number from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_float64">
+			<return type="float" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 64-bit floating point number from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_int8">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read an 8-bit signed integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_int16">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 16-bit signed integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_int32">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 32-bit signed integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_int64">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 64-bit signed integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_uint8">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read an 8-bit unsigned integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			Since there is no 8-bit unsigned integer in OPC UA, they are automatically cast to 16-bit integers.
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_uint16">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 16-bit unsigned integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_uint32">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 32-bit unsigned integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="read_uint64">
+			<return type="int" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<description>
+			Read a 64-bit unsigned integer from the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			[i]Note: this does not initiate a new read to the PLC device or OPC UA server. It reads data from a cache which is updated on the tag group's [code]polling_interval[/code].[/i]
+			</description>
+		</method>
+		<method name="register_tag">
+			<return type="bool" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="elem_count" type="int" />
+			<description>
+			Register a tag to a [code]tag_group_name[/code]. The tag group must be registered prior to registering the tag.
+			[i]Note: [code]elem_count[/code] is not currently implemented. This will be future work if array reads/writes are needed.[/i]
+			</description>
+		</method>
+		<method name="register_tag_group">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="polling_interval" type="int" />
+			<param index="2" name="protocol" type="String" />
+			<param index="3" name="gateway" type="String" />
+			<param index="4" name="path" type="String" />
+			<param index="5" name="cpu" type="String" />
+			<description>
+			Register a tag group. Valid values for [code]protocol[/code] are:
+			- [code]ab_eip[/code]
+			- [code]modbus_tcp[/code]
+			- [code]opc_ua[/code].
+			[code]gateway[/code], [code]path[/code] and [code]cpu[/code] are multi-use fields.
+			When the protocol is [code]ab_eip[/code] or [code]modbus_tcp[/code], the [code]gateway[/code] is the IP address of the target device (typically a PLC), the [code]path[/code] is the path (rack/slot) to a processor, and the [code]cpu[/code] may be one of the following values:
+			- [code]ControlLogix[/code]
+			- [code]PLC5[/code]
+			- [code]SLC500[/code]
+			- [code]LogixPccc[/code]
+			- [code]Micro800[/code]
+			- [code]MicroLogix[/code]
+			- [code]Omron[/code]
+			When the protocol is [code]opc_ua[/code], the [code]gateway[/code] is the OPC UA server's "endpoint", and the [code]path[/code] field is the "namespace" (typically a number). [code]cpu[/code] is not used.
+			</description>
+		</method>
+		<method name="set_enable_comms">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+			Enable (true) or disable (false) the communications. No communication functionality can occur while the simulation is not enabled.
+			</description>
+		</method>
+		<method name="set_enable_log">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+			Enable (true) or disable (false) the logging. Note that errors are always logged to the console, and turning on this setting provides additional information.
+			</description>
+		</method>
+		<method name="set_sim_running">
+			<return type="void" />
+			<param index="0" name="value" type="bool" />
+			<description>
+			Inform the [code]OIPComms[/code] singleton that the simulation is running. No communication functionality can occur while the simulation is not running.
+			The only exception is that tag groups, and tags may be registered while the simulation is not running.
+			</description>
+		</method>
+		<method name="write_bit">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="bool" />
+			<description>
+			Write a bit (boolean) to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_float32">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="float" />
+			<description>
+			Write a 32-bit float to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_float64">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="float" />
+			<description>
+			Write a 64-bit float to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_int8">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write an 8-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_int16">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write a 16-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_int32">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write a 32-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_int64">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write a 64-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_uint8">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write an unsigned 8-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			Since there is no 8-bit unsigned integer in OPC UA, they are automatically cast to 16-bit integers.
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_uint16">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write an unsigned 16-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_uint32">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write an unsigned 32-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+		<method name="write_uint64">
+			<return type="void" />
+			<param index="0" name="tag_group_name" type="String" />
+			<param index="1" name="tag_name" type="String" />
+			<param index="2" name="value" type="int" />
+			<description>
+			Write an unsigned 64-bit signed integer to the registered [code]tag_name[/code] and [code]tag_group_name[/code].
+			This operation queues a write operation (either PLC tag or OPC UA client) to be performed on a separate thread. This function returns immediately, regardless if the value is written.
+			Write operations occur immediately on the communication thread and do not wait for a polling interval.
+			</description>
+		</method>
+	</methods>
+	<signals>
+		<signal name="comms_error">
+			<description>
+			This signal is emitted [i]once[/i]; when the first error occurs in [code]OIPComms[/code]. Subsequent errors will not fire this signal.
+			</description>
+		</signal>
+		<signal name="tag_group_initialized">
+			<param index="0" name="tag_group_name" type="String" />
+			<description>
+			This signal is emitted when a tag group is fully initialized. Currently, [code]OIPComms[/code] will wait 500ms after the simulation starts to start checking if all tags have been registered and connections/sockets are open.
+			Once all tags belonging to the [code]tag_group_name[/code] are initialized, and connected, this signal will emit.
+			</description>
+		</signal>
+		<signal name="tag_group_polled">
+			<param index="0" name="tag_group_name" type="String" />
+			<description>
+			This signal is emitted every time a tag group is polled, based on its [code]polling_interval[/code]. It does not wait until all read operations are complete on that polling interval, the signal fires right away.
+			</description>
+		</signal>
+		<signal name="tag_groups_registered">
+			<description>
+			This signal is not emitted by [code]OIPComms[/code], since [code]OIPComms[/code] does not know when all tag groups are registered. It may be emitted externally.
+			</description>
+		</signal>
+	</signals>
+</class>

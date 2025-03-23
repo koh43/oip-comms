@@ -1,9 +1,9 @@
 # Open Industry Project - GDextension Component
-This component is for the Open Industry Project (OIP). It enables communications with the following two other libraries:
-- https://github.com/libplctag/libplctag
-- https://github.com/open62541/open62541
+This component is for the Open Industry Project (OIP). It enables communications with the following two other libraries. Both are built from source from the following commits:
+- https://github.com/libplctag/libplctag/commit/c55bc5876d938dda1c609750cde5ae4812d7b8a8
+- https://github.com/open62541/open62541/commit/de932080cf1264748b5b757dd7e87e422c4df0aa
 
-See PR [https://github.com/open62541/open62541](https://github.com/Open-Industry-Project/Open-Industry-Project/pull/161)
+See PR on Open Industry Project [https://github.com/open62541/open62541](https://github.com/Open-Industry-Project/Open-Industry-Project/pull/161)
 
 # Building from Source
 Please read Godot's documentation on building from source and GDextension:
@@ -22,6 +22,10 @@ This GDextension as well as the libs (libplctag, open62541) are built with the `
 https://stackoverflow.com/a/56061183/7132687
 
 This project uses the standard library.
+
+# Documentation
+
+
 
 # Debugging
 As long as you build with `debug_symbols=yes`, the 4.5 branch of OIP will be able to debug this GDextension application. 

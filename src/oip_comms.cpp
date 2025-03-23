@@ -184,7 +184,7 @@ OIP_OPC_SET(int8, int8_t, INT16, INT)
 OIP_OPC_SET(float64, double, DOUBLE, FLOAT)
 OIP_OPC_SET(float32, float, FLOAT, FLOAT)
 
-#define OIP_OPC_SET_CALL(a) \
+#define OIP_SET_CALL(a) \
 if (tag_group.protocol == "opc_ua") { \
 	opc_tag_set_##a(write_req.tag_group_name, write_req.tag_name, write_req.value); \
 } else { \
@@ -202,37 +202,37 @@ void OIPComms::process_write(const WriteRequest &write_req) {
 
 	switch (write_req.instruction) {
 		case 0:
-			OIP_OPC_SET_CALL(bit)
+			OIP_SET_CALL(bit)
 			break;
 		case 1:
-			OIP_OPC_SET_CALL(uint64)
+			OIP_SET_CALL(uint64)
 			break;
 		case 2:
-			OIP_OPC_SET_CALL(int64)
+			OIP_SET_CALL(int64)
 			break;
 		case 3:
-			OIP_OPC_SET_CALL(uint32)
+			OIP_SET_CALL(uint32)
 			break;
 		case 4:
-			OIP_OPC_SET_CALL(int32)
+			OIP_SET_CALL(int32)
 			break;
 		case 5:
-			OIP_OPC_SET_CALL(uint16)
+			OIP_SET_CALL(uint16)
 			break;
 		case 6:
-			OIP_OPC_SET_CALL(int16)
+			OIP_SET_CALL(int16)
 			break;
 		case 7:
-			OIP_OPC_SET_CALL(uint8)
+			OIP_SET_CALL(uint8)
 			break;
 		case 8:
-			OIP_OPC_SET_CALL(int8)
+			OIP_SET_CALL(int8)
 			break;
 		case 9:
-			OIP_OPC_SET_CALL(float64)
+			OIP_SET_CALL(float64)
 			break;
 		case 10:
-			OIP_OPC_SET_CALL(float32)
+			OIP_SET_CALL(float32)
 			break;
 	}
 
@@ -509,6 +509,7 @@ void OIPComms::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("tag_group_polled", PropertyInfo(Variant::STRING, "tag_group_name")));
 	ADD_SIGNAL(MethodInfo("tag_group_initialized", PropertyInfo(Variant::STRING, "tag_group_name")));
 	ADD_SIGNAL(MethodInfo("comms_error"));
+	ADD_SIGNAL(MethodInfo("tag_groups_registered"));
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {

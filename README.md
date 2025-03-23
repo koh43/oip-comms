@@ -13,7 +13,9 @@ Please read Godot's documentation on building from source and GDextension:
 Build command:
 `scons platform=windows debug_symbols=yes`
 
-The output of building will be the DLLs located in: https://github.com/bikemurt/OIP_gdext/tree/main/demo/bin/windows. The DLLs, and `oip_comms.gdextension` file must be copied to the `oip_comms` dock plugin for the main Open Industry Project repo: `Open-Industry-Project/addons/oip_comms/bin/`. Right now just building for Windows, but should be extendable to other platforms.
+The output of building will be the DLLs located in: https://github.com/bikemurt/OIP_gdext/tree/main/demo/bin/windows
+
+The DLLs, and `oip_comms.gdextension` file must be copied to the `oip_comms` dock plugin for the main Open Industry Project repo: `Open-Industry-Project/addons/oip_comms/bin/`. Right now just building for Windows, but should be extendable to other platforms.
 
 This GDextension as well as the libs (libplctag, open62541) are built with the `/MT` flag. According to dumpbin this removes any external deps on MSVC runtime and should improve portability.
 

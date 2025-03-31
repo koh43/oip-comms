@@ -394,12 +394,15 @@ bool OIPComms::tag_exists(const String& tag_group_name, const String& tag_name) 
 	return false;
 }
 
-bool OIPComms::process_plc_read(const PlcTag &tag, const String &tag_name) {
+bool OIPComms::process_plc_read(PlcTag &tag, const String &tag_name) {
 	int read_result = plc_tag_read(tag.tag_pointer, timeout);
 	if (read_result != PLCTAG_STATUS_OK) {
 		print("Failed to read tag: " + tag_name, true);
 		return false;
 	}
+	if (!tag.initialized)
+		tag.initialized = true;
+
 	return true;
 }
 
@@ -560,10 +563,7 @@ bool OIPComms::register_tag(const String p_tag_group_name, const String p_tag_na
 				OpcUaTag tag = { false, UA_NODEID_NULL, { 0 } };
 				tag_group.opc_ua_tags[p_tag_name] = tag;
 			} else {
-				PlcTag tag = {
-					-1,
-					p_elem_count
-				};
+				PlcTag tag = { false, -1, p_elem_count, false };
 				tag_group.plc_tags[p_tag_name] = tag;
 			}
 			print("Registered tag " + p_tag_name + " under tag group " + p_tag_group_name);
@@ -657,14 +657,16 @@ void OIPComms::clear_tag_groups() {
 				OpcUaTag tag = tag_group.opc_ua_tags[p_tag_name];                  \
 				if (tag.initialized && UA_Variant_hasScalarType(&tag.value, &UA_TYPES[UA_TYPES_##c])) { \
 					return *(b *)tag.value.data; \
-				} else { return -1; } \
+				} else { return 0.0; } \
 			} else {                                                               \
 				PlcTag tag = tag_group.plc_tags[p_tag_name];                      \
-				int32_t tag_pointer = tag.tag_pointer;                             \
-				return plc_tag_get_##a(tag_pointer, 0);                            \
+				if (tag.initialized) {                                           \
+					int32_t tag_pointer = tag.tag_pointer;                     \
+					return plc_tag_get_##a(tag_pointer, 0);                     \
+				} else { return 0.0; }                                             \
 			}                                                                      \
 		}                                                                          \
-		return -1;                                                                 \
+		return 0.0;                                                                 \
 	}
 
 OIP_READ_FUNC(bit, bool, BOOLEAN)

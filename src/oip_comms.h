@@ -26,6 +26,7 @@ private:
 	String last_error = "";
 
 	struct PlcTag {
+		bool initialized = false;
 		int32_t tag_pointer = -1;
 		int elem_count;
 
@@ -36,7 +37,7 @@ private:
 	};
 
 	struct OpcUaTag {
-		bool initialized = false; // need to store "initialized" for OPC UA tags because there is no underlying state that tracks it
+		bool initialized = false;
 		UA_NodeId node_id;
 		UA_Variant value;
 
@@ -118,7 +119,7 @@ private:
 	void process_write(const WriteRequest &write_req);
 
 	// process individual PLC read
-	bool process_plc_read(const PlcTag &tag, const String &tag_name);
+	bool process_plc_read(PlcTag &tag, const String &tag_name);
 
 	void opc_write(const String &tag_group_name, const String &tag_path);
 

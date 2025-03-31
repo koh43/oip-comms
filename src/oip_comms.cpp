@@ -513,6 +513,7 @@ void OIPComms::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("tag_group_initialized", PropertyInfo(Variant::STRING, "tag_group_name")));
 	ADD_SIGNAL(MethodInfo("comms_error"));
 	ADD_SIGNAL(MethodInfo("tag_groups_registered"));
+	ADD_SIGNAL(MethodInfo("enable_comms_changed"));
 }
 
 void OIPComms::register_tag_group(const String p_tag_group_name, const int p_polling_interval, const String p_protocol, const String p_gateway, const String p_path, const String p_cpu) {
@@ -614,7 +615,7 @@ void OIPComms::set_enable_log(bool value) {
 	} else {
 		UtilityFunctions::print("Logging disabled");
 	}
-
+	emit_signal("enable_comms_changed");
 }
 
 bool OIPComms::get_enable_log() {

@@ -349,5 +349,10 @@
 			This signal is not emitted by [code]OIPComms[/code], since [code]OIPComms[/code] does not know when all tag groups are registered. It may be emitted externally.
 			</description>
 		</signal>
+		<signal name="enable_comms_changed">
+			<description>
+			This signal is emitted every time the comms are enabled or disabled. It is parameterless, and expects that the [code]get_enable_comms()[/code] function will be called to get the comms enabled state.
+			</description>
+		</signal>
 	</signals>
 </class>

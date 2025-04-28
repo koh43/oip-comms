@@ -178,6 +178,8 @@ public:
 	OIP_DECLARE_FUNC(float64, double)
 	OIP_DECLARE_FUNC(float32, float)
 
+	TypedArray<int32_t> read_int32_array(const String p_tag_group_name, const String p_tag_name);
+
 	void clear_tag_groups();
 
 	void process();

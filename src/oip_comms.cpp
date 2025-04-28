@@ -505,6 +505,8 @@ void OIPComms::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("write_float64", "tag_group_name", "tag_name", "value"), &OIPComms::write_float64);
 	ClassDB::bind_method(D_METHOD("write_float32", "tag_group_name", "tag_name", "value"), &OIPComms::write_float32);
 
+	ClassDB::bind_method(D_METHOD("read_int32_array", "tag_group_name", "tag_name"), &OIPComms::read_int32_array);
+
 	ClassDB::bind_method(D_METHOD("get_tag_groups"), &OIPComms::get_tag_groups);
 
 	ClassDB::bind_method(D_METHOD("clear_tag_groups"), &OIPComms::clear_tag_groups);
@@ -681,6 +683,26 @@ OIP_READ_FUNC(uint8, uint8_t, UINT16)
 OIP_READ_FUNC(int8, int8_t, INT16)
 OIP_READ_FUNC(float64, double, DOUBLE)
 OIP_READ_FUNC(float32, float, FLOAT)
+
+TypedArray<int32_t> OIPComms::read_int32_array(const String p_tag_group_name, const String p_tag_name) {
+	TypedArray<int32_t> data;
+	uint8_t elem_size = 4;
+	if (enable_comms && sim_running && tag_exists(p_tag_group_name, p_tag_name)) {
+		TagGroup &tag_group = tag_groups[p_tag_group_name];
+		if (tag_group.protocol == "opc_ua") {
+
+		} else {
+			PlcTag tag = tag_group.plc_tags[p_tag_name];
+			if (tag.initialized) {
+				int32_t tag_pointer = tag.tag_pointer;
+				for (int i = 0; i < tag.elem_count; i++) {
+					data.push_back(plc_tag_get_int32(tag_pointer, i * elem_size));
+				}
+			}
+		}
+	}
+	return data;
+}
 
 #define OIP_WRITE_FUNC(a, b, c)                                                                                                         \
 	void OIPComms::write_##a(const String p_tag_group_name, const String p_tag_name, const b p_value) {                                 \

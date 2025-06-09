@@ -41,7 +41,10 @@ env.Append(LIBS=["plctag", "open62541"])
 if env["platform"] == "windows":
     env.Append(CXXFLAGS=["/MT"])
 else:
-    env.Append(LINKFLAGS=["-static"])
+    # env.Append(LINKFLAGS=["-static"])
+    env.Append(CPPDEFINES=['HAVE_GCC_SYNC_BUILTINS'])
+    env.Append(CPPDEFINES=['UA_HAS_STD_ATOMICS=0'])
+
 sources = Glob("src/*.cpp")
 
 if env["target"] in ["editor", "template_debug"]:

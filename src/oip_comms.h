@@ -1,15 +1,19 @@
 #ifndef OIP_COMMS_H
 #define OIP_COMMS_H
 
+#include <atomic>
+#include <thread>
+#include <memory>
+#include <map>
+#include <string>
+#include <vector>
+#include <queue>
+
 #include "libplctag.h"
 #include "open62541.h"
 
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/thread.hpp>
-#include <map>
-#include <string>
-#include <vector>
-#include <queue>
 
 #include "oip_blocking_queue.h"
 

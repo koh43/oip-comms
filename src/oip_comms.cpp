@@ -154,7 +154,7 @@ void OIPComms::opc_write(const String &tag_group_name, const String &tag_path) {
 
 #define OIP_OPC_SET(a, b, c, d) \
 void OIPComms::opc_tag_set_##a(const String &tag_group_name, const String &tag_path, const godot::Variant value) { \
-	if (value.get_type() == Variant::##d) { \
+	if (value.get_type() == Variant::d) { \
 		if (!opc_ua_client_connected(tag_group_name)) return; \
 		OpcUaTag &tag = tag_groups[tag_group_name].opc_ua_tags[tag_path]; \
 		if (!tag.initialized) return; \
@@ -374,7 +374,7 @@ bool OIPComms::opc_ua_client_connected(const String &tag_group_name) {
 	UA_StatusCode client_status;
 	UA_Client_getState(tag_group.client, nullptr, nullptr, &client_status);
 	if (client_status != UA_STATUSCODE_GOOD)
-		false;
+		return false;
 	return true;
 }
 

@@ -40,19 +40,19 @@
  * ------------
  * Define one of the following. */
 
-#define UA_ARCHITECTURE_WIN32
+#define UA_ARCHITECTURE_POSIX
 /* #undef UA_ARCHITECTURE_POSIX */
 /* #undef UA_ARCHITECTURE_ZEPHYR */
 
 /* Select default architecture if none is selected */
-#if !defined(UA_ARCHITECTURE_WIN32) && !defined(UA_ARCHITECTURE_POSIX) &&      \
-    !defined(UA_ARCHITECTURE_ZEPHYR)
-# ifdef _WIN32
-#  define UA_ARCHITECTURE_WIN32
-# else
-#  define UA_ARCHITECTURE_POSIX
-# endif
-#endif
+// #if !defined(UA_ARCHITECTURE_WIN32) && !defined(UA_ARCHITECTURE_POSIX) &&      \
+//     !defined(UA_ARCHITECTURE_ZEPHYR)
+// # ifdef _WIN32
+// #  define UA_ARCHITECTURE_WIN32
+// # else
+// #  define UA_ARCHITECTURE_POSIX
+// # endif
+// #endif
 
 /**
  * Feature Options
@@ -252,7 +252,8 @@
 #  ifdef _NO_WINSOCKAPI_
 #   undef _WINSOCKAPI_
 #  endif
-# elif defined(__has_include) && __has_include(<stdatomic.h>)
+# elif (!defined(UA_HAS_STD_ATOMICS) || (defined(UA_HAS_STD_ATOMICS) && UA_HAS_STD_ATOMICS != 0)) && \
+       defined(__has_include) && __has_include(<stdatomic.h>)
 #  define UA_HAVE_C11_ATOMICS
 #  include <stdatomic.h>
 # elif !defined(HAVE_GCC_SYNC_BUILTINS)
@@ -424,7 +425,7 @@ extern UA_THREAD_LOCAL void * (*UA_reallocSingleton)(void *ptr, size_t size);
 
 typedef struct {
     /* Critical sections on win32 are always recursive */
-    CRITICAL_SECTION mutex;
+    pthread_mutex_t mutex;
     unsigned count; /* For assertions that we hold the mutex */
 } UA_Lock;
 
